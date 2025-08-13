@@ -1,3 +1,31 @@
+# FridgeNotes 📝
+
+A collaborative note-taking application perfect for family shopping lists, shared reminders, and organizing your thoughts. FridgeNotes features real-time collaboration, drag-and-drop organization, and a clean, intuitive interface.
+
+## 📸 Screenshots
+
+### Main Interface
+![Main Screen](screenshots/main-screen.png)
+*The main FridgeNotes interface showing your notes in an organized grid layout*
+
+### Creating Notes
+![Create Note](screenshots/create-note.png)
+*Easy note creation with support for both text notes and interactive checklists*
+
+### Label System
+![Labels](screenshots/labels.png)
+*Organize your notes with color-coded labels for better categorization*
+
+![Create Label](screenshots/create-label.png)
+*Create custom labels to organize your notes*
+
+![Manage Labels](screenshots/manage-labels.png)
+*Comprehensive label management with editing and organization tools*
+
+### User Management
+![User Profile](screenshots/user-profile.png)
+*User profile management and admin controls*
+
 ## 🚀 Quick Start
 
 ### Prerequisites

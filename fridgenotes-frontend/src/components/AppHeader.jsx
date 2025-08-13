@@ -18,6 +18,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import ThemeToggle from './ThemeToggle';
 
 const AppHeader = ({ 
   searchTerm, 
@@ -71,6 +72,8 @@ const AppHeader = ({
             <Tag className="h-4 w-4" />
             <span className="hidden sm:inline ml-1">Labels</span>
           </Button>
+
+          <ThemeToggle />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

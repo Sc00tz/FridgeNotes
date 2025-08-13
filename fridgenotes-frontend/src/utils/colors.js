@@ -9,7 +9,13 @@ export const NOTE_COLORS = {
     backgroundHover: '#f8f9fa',
     border: '#e0e0e0',
     text: '#202124',
-    icon: '#5f6368'
+    icon: '#5f6368',
+    // Dark mode variants
+    backgroundDark: '#1f2937',
+    backgroundHoverDark: '#374151',
+    borderDark: '#4b5563',
+    textDark: '#f9fafb',
+    iconDark: '#9ca3af'
   },
   coral: {
     name: 'Coral',
@@ -18,7 +24,13 @@ export const NOTE_COLORS = {
     backgroundHover: '#f28b82',
     border: '#e06055',
     text: '#202124',
-    icon: '#d33b2c'
+    icon: '#d33b2c',
+    // Dark mode variants
+    backgroundDark: '#7f1d1d',
+    backgroundHoverDark: '#991b1b',
+    borderDark: '#dc2626',
+    textDark: '#fef2f2',
+    iconDark: '#fca5a5'
   },
   peach: {
     name: 'Peach', 
@@ -117,12 +129,36 @@ export const getColorConfig = (colorValue) => {
   return NOTE_COLORS[colorValue] || NOTE_COLORS.default;
 };
 
+// Theme-aware color configuration
+export const getThemeAwareColorConfig = (colorValue, isDark = false) => {
+  const colorConfig = NOTE_COLORS[colorValue] || NOTE_COLORS.default;
+  
+  if (!isDark) {
+    return {
+      background: colorConfig.background,
+      backgroundHover: colorConfig.backgroundHover,
+      border: colorConfig.border,
+      text: colorConfig.text,
+      icon: colorConfig.icon
+    };
+  }
+  
+  // Dark mode - use dark variants if available, otherwise darken light colors
+  return {
+    background: colorConfig.backgroundDark || colorConfig.background,
+    backgroundHover: colorConfig.backgroundHoverDark || colorConfig.backgroundHover,
+    border: colorConfig.borderDark || colorConfig.border,
+    text: colorConfig.textDark || '#f9fafb',
+    icon: colorConfig.iconDark || colorConfig.icon
+  };
+};
+
 // Array of color options for UI (excluding default for selection palette)
 export const COLOR_OPTIONS = Object.values(NOTE_COLORS).filter(color => color.value !== 'default');
 
 // CSS custom properties generator for dynamic theming
-export const generateColorCSS = (colorValue) => {
-  const config = getColorConfig(colorValue);
+export const generateColorCSS = (colorValue, isDark = false) => {
+  const config = getThemeAwareColorConfig(colorValue, isDark);
   return {
     '--note-bg': config.background,
     '--note-bg-hover': config.backgroundHover,

@@ -25,6 +25,7 @@ import { useAuth } from './hooks/useAuth';
 import { useAdmin } from './hooks/useAdmin';
 import { useShare } from './hooks/useShare';
 import useNoteLabels from './hooks/useNoteLabels';
+import { ThemeProvider } from './hooks/useTheme';
 
 import './App.css';
 import './mobile.css';

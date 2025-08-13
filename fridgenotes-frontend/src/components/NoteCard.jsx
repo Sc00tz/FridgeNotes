@@ -28,7 +28,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import ColorPicker from './ColorPicker';
-import { getColorConfig, generateColorCSS } from '../utils/colors';
+import { getColorConfig, generateColorCSS, getThemeAwareColorConfig } from '../utils/colors';
+import { useTheme } from '../hooks/useTheme';
 import LabelBadges from './LabelBadges';
 import LabelPicker from './LabelPicker';
 import './NoteCard.css';
@@ -137,9 +138,10 @@ const NoteCard = ({
 
 
 
-  // Get color configuration for this note
-  const colorConfig = getColorConfig(note.color || 'default');
-  const colorStyles = generateColorCSS(note.color || 'default');
+  // Get theme and color configuration for this note
+  const { isDark } = useTheme();
+  const colorConfig = getThemeAwareColorConfig(note.color || 'default', isDark);
+  const colorStyles = generateColorCSS(note.color || 'default', isDark);
 
   return (
     <Card 

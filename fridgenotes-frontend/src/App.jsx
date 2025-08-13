@@ -19,6 +19,7 @@ import RegisterModal from './components/RegisterModal';
 import UserProfileModal from './components/UserProfileModal';
 import AdminPanel from './components/AdminPanel';
 import LabelManagement from './components/LabelManagement';
+import PWAInstallPrompt from './components/PWAInstallPrompt';
 
 // Custom hooks
 import { useAuth } from './hooks/useAuth';
@@ -225,6 +226,9 @@ function App() {
           {auth.success || noteLabels.success || admin.success || share.success}
         </div>
       )}
+
+      {/* PWA Install Prompt */}
+      <PWAInstallPrompt />
     </div>
   );
 }

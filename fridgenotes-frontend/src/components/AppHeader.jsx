@@ -36,7 +36,11 @@ const AppHeader = ({
       <div className="container flex h-14 max-w-screen-2xl items-center justify-between">
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2">
-            <div className="h-6 w-6 bg-primary rounded"></div>
+            <img 
+              src="/FridgeNotesLogo.jpeg" 
+              alt="FridgeNotes Logo" 
+              className="h-8 w-8 rounded object-cover"
+            />
             <span className="font-bold">FridgeNotes</span>
           </div>
           

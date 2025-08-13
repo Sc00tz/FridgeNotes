@@ -53,6 +53,11 @@ export default defineConfig({
             type: 'image/png'
           },
           {
+            src: 'pwa-144x144.png', 
+            sizes: '144x144',
+            type: 'image/png'
+          },
+          {
             src: 'pwa-192x192.png',
             sizes: '192x192',
             type: 'image/png'
@@ -89,6 +94,7 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    host: '0.0.0.0', // Allow external connections
     proxy: {
       '/api': {
         target: 'http://localhost:5009',

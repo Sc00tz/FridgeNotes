@@ -29,6 +29,20 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_secret_key')
 # Enable CORS for all routes
 CORS(app, supports_credentials=True)
 
+# Add security headers for PWA behind proxy
+@app.after_request
+def after_request(response):
+    # Add security headers for PWA
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    
+    # Allow service worker to be registered from any scope
+    if 'Service-Worker-Allowed' not in response.headers:
+        response.headers['Service-Worker-Allowed'] = '/'
+    
+    return response
+
 # Initialize Flask-Login
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -51,6 +65,31 @@ app.register_blueprint(label_bp, url_prefix='/api')
 
 # Register error handlers
 register_error_handlers(app)
+
+# Debug endpoint for PWA files
+@app.route('/debug/pwa')
+def debug_pwa():
+    """Debug endpoint to check PWA file availability"""
+    import json
+    debug_info = {
+        'static_folder': app.static_folder,
+        'files_exist': {},
+        'manifest_content': None
+    }
+    
+    pwa_files = ['manifest.webmanifest', 'sw.js', 'pwa-192x192.png', 'pwa-512x512.png']
+    
+    for file in pwa_files:
+        file_path = os.path.join(app.static_folder, file)
+        debug_info['files_exist'][file] = os.path.exists(file_path)
+        if file == 'manifest.webmanifest' and os.path.exists(file_path):
+            try:
+                with open(file_path, 'r') as f:
+                    debug_info['manifest_content'] = json.load(f)
+            except Exception as e:
+                debug_info['manifest_content'] = f"Error reading manifest: {str(e)}"
+    
+    return debug_info
 
 # Database configuration
 app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'database', 'app.db')}"
@@ -201,7 +240,20 @@ def serve(path):
         return "Static folder not configured", 404
 
     if path != "" and os.path.exists(os.path.join(static_folder_path, path)):
-        return send_from_directory(static_folder_path, path)
+        response = send_from_directory(static_folder_path, path)
+        
+        # Add PWA-specific headers
+        if path.endswith('.webmanifest'):
+            response.headers['Content-Type'] = 'application/manifest+json'
+            response.headers['Cache-Control'] = 'no-cache'
+        elif path.endswith('sw.js') or path.endswith('registerSW.js'):
+            response.headers['Content-Type'] = 'application/javascript'
+            response.headers['Cache-Control'] = 'no-cache'
+            response.headers['Service-Worker-Allowed'] = '/'
+        elif path.startswith('pwa-') and path.endswith('.png'):
+            response.headers['Cache-Control'] = 'public, max-age=31536000'  # Cache icons for 1 year
+        
+        return response
     else:
         index_path = os.path.join(static_folder_path, 'index.html')
         if os.path.exists(index_path):

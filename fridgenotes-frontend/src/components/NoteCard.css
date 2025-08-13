@@ -1,0 +1,98 @@
+/* Custom CSS for color-coded notes with hover effects */
+.note-card {
+  transition: all 0.2s ease-in-out;
+}
+
+.note-card:hover {
+  background-color: var(--note-bg-hover) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Ensure text inputs inherit the note's color */
+.note-card input, 
+.note-card textarea {
+  background-color: transparent;
+}
+
+.note-card input::placeholder,
+.note-card textarea::placeholder {
+  color: rgba(32, 33, 36, 0.6);
+}
+
+/* Color picker improvements */
+.color-picker-button {
+  transition: all 0.15s ease;
+}
+
+.color-picker-button:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.color-picker-swatch {
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.color-picker-swatch:hover {
+  transform: scale(1.1);
+}
+
+.color-picker-swatch:active {
+  transform: scale(0.95);
+}
+
+/* Note metadata styling to work with all colors */
+.note-metadata {
+  color: rgba(32, 33, 36, 0.7) !important;
+}
+
+/* Label badge improvements */
+.label-badge {
+  transition: all 0.15s ease-in-out;
+}
+
+.label-badge:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.label-badge.clickable:hover {
+  transform: translateY(-1px) scale(1.02);
+}
+
+.label-badge.clickable:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Label tooltip styling */
+.label-tooltip {
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Ensure labels don't break layout */
+.labels-container {
+  min-height: 24px; /* Reserve space even when no labels */
+}
+
+/* Label more indicator styling */
+.label-more-indicator {
+  transition: all 0.15s ease;
+}
+
+.label-more-indicator:hover {
+  border-color: #9ca3af;
+  background-color: #f3f4f6;
+  transform: scale(1.05);
+}

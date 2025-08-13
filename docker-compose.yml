@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  fridgenotes:
+    build: .
+    ports:
+      - "5009:5009"
+    volumes:
+      - ./data:/app/src/database
+    environment:
+      - FLASK_ENV=production
+      - PYTHONPATH=/app
+      - SECRET_KEY=b'9\xad\xf1\x1b\xac\x82\xc1\xe3\x95\xf8\xd7\xd5\x1a\xde\x9f\x9d'
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5009/api/users"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  data:
+    driver: local
+

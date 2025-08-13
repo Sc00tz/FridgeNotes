@@ -76,13 +76,13 @@ FridgeNotes is a Progressive Web App that can be installed on any device:
 
 ```bash
 # Clone or navigate to your project directory
-cd FridgeNotesfridge-notes
+cd fridgenotes
 
 # Start the application
 docker-compose up -d
 
 # Check the logs for admin credentials
-docker-compose logs FridgeNotesfridge-notes
+docker-compose logs fridgenotes
 ```
 
 ### 2. Get Your Admin Credentials
@@ -134,10 +134,10 @@ If you missed the admin password in the logs, you can retrieve it by checking th
 
 ```bash
 # View recent logs
-docker-compose logs FridgeNotesfridge-notes | grep "Password:"
+docker-compose logs fridgenotes | grep "Password:"
 
 # Or view all startup logs
-docker-compose logs FridgeNotesfridge-notes
+docker-compose logs fridgenotes
 ```
 
 If you've lost the admin password completely, you can reset the database (⚠️ this will delete all data):
@@ -147,7 +147,7 @@ If you've lost the admin password completely, you can reset the database (⚠️
 docker-compose down
 
 # Remove the database volume (WARNING: deletes all data!)
-docker volume rm FridgeNotesfridge-notes_app-data
+docker volume rm fridgenotes_data
 
 # Start again (will create new admin with new password)
 docker-compose up -d

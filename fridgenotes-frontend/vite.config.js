@@ -55,12 +55,14 @@ export default defineConfig({
           {
             src: 'pwa-144x144.png', 
             sizes: '144x144',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
           },
           {
             src: 'pwa-192x192.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
           },
           {
             src: 'pwa-512x512.png',
@@ -73,6 +75,21 @@ export default defineConfig({
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable'
+          }
+        ],
+        screenshots: [
+          {
+            src: 'screenshots/wide-main.png',
+            sizes: '1280x720',
+            type: 'image/png',
+            form_factor: 'wide',
+            label: 'Main interface showing notes in grid layout'
+          },
+          {
+            src: 'screenshots/mobile-main.png',
+            sizes: '375x812',
+            type: 'image/png',
+            label: 'Mobile view of the main notes interface'
           }
         ]
       }

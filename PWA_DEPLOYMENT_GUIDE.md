@@ -17,7 +17,7 @@ Your FridgeNotes app now has all the required PWA components:
 ## 🚀 **Deployment Steps**
 
 ### **1. Deploy to Production (HTTPS)**
-Since your Docker setup handles HTTPS via proxy:
+For your production Docker setup with HTTPS proxy:
 
 ```bash
 # Build the PWA
@@ -28,29 +28,29 @@ npm run build
 ```
 
 ### **2. Verify PWA Files on Production**
-Once deployed to `https://notes.scootz.net`, check these URLs:
+Once deployed to `https://your-domain.com`, check these URLs:
 
-- **Manifest**: https://notes.scootz.net/manifest.webmanifest
-- **Service Worker**: https://notes.scootz.net/sw.js  
-- **Icons**: https://notes.scootz.net/pwa-192x192.png
-- **Main App**: https://notes.scootz.net/
+- **Manifest**: https://your-domain.com/manifest.webmanifest
+- **Service Worker**: https://your-domain.com/sw.js  
+- **Icons**: https://your-domain.com/pwa-192x192.png
+- **Main App**: https://your-domain.com/
 
 ### **3. Test PWA Installation**
 
 #### **On Android Chrome:**
-1. Visit `https://notes.scootz.net` (must be HTTPS)
+1. Visit `https://your-domain.com` (must be HTTPS)
 2. Look for install notification or ⊕ icon in address bar
 3. If not visible, try Chrome menu → "Add to Home screen"
 4. Check Chrome DevTools → Application → Manifest
 
 #### **On iPhone Safari:**
-1. Visit `https://notes.scootz.net`  
+1. Visit `https://your-domain.com`  
 2. Tap Share button (□↗)
 3. Scroll down → "Add to Home Screen"
 4. Confirm installation
 
 #### **On Desktop:**
-1. Visit `https://notes.scootz.net`
+1. Visit `https://your-domain.com`
 2. Look for install icon in address bar
 3. Or use browser menu → Apps → Install
 
@@ -59,8 +59,8 @@ Once deployed to `https://notes.scootz.net`, check these URLs:
 ### **If Icons Don't Load:**
 ```bash
 # Check if icons exist on production
-curl -I https://notes.scootz.net/pwa-192x192.png
-curl -I https://notes.scootz.net/manifest.webmanifest
+curl -I https://your-domain.com/pwa-192x192.png
+curl -I https://your-domain.com/manifest.webmanifest
 ```
 
 ### **If Install Prompt Doesn't Appear:**
@@ -100,20 +100,20 @@ npm run build
 ```
 
 ### **Step 2: Test HTTPS Access**
-Visit: `https://notes.scootz.net`
+Visit: `https://your-domain.com`
 - Should load normally
 - Check for any console errors
 
 ### **Step 3: Validate PWA Components**
 ```bash
 # Test manifest
-curl https://notes.scootz.net/manifest.webmanifest
+curl https://your-domain.com/manifest.webmanifest
 
 # Test service worker  
-curl https://notes.scootz.net/sw.js
+curl https://your-domain.com/sw.js
 
 # Test icons
-curl -I https://notes.scootz.net/pwa-192x192.png
+curl -I https://your-domain.com/pwa-192x192.png
 ```
 
 ### **Step 4: Mobile Testing**
@@ -151,7 +151,7 @@ Add it temporarily to debug: `<PWAValidator />`
 
 - [ ] **Build Complete**: `npm run build` successful
 - [ ] **Files Deployed**: All `src/static/` files on production server
-- [ ] **HTTPS Working**: Site accessible via https://notes.scootz.net
+- [ ] **HTTPS Working**: Site accessible via https://your-domain.com
 - [ ] **Manifest Loads**: `/manifest.webmanifest` returns JSON
 - [ ] **Service Worker Loads**: `/sw.js` returns JavaScript
 - [ ] **Icons Load**: All `/pwa-*.png` files return images
@@ -175,7 +175,7 @@ Once deployed to HTTPS production:
 
 ### **"No install prompt" Issue:**  
 - **Cause**: Not served over HTTPS
-- **Fix**: Must test on https://notes.scootz.net, not localhost
+- **Fix**: Must test on https://your-domain.com, not localhost
 
 ### **"Service Worker failed" Error:**
 - **Cause**: SW registration failed
@@ -195,4 +195,4 @@ You'll know the PWA is working when:
 4. **Offline mode** works (disconnect internet, app still functions)
 5. **App icon** appears with your FridgeNotes logo
 
-Deploy to production and test on `https://notes.scootz.net` - that's where the magic happens! 🚀
+Deploy to production and test on `https://your-domain.com` - that's where the magic happens! 🚀

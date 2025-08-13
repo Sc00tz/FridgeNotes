@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import ColorPicker from './ColorPicker';
 import { getColorConfig, generateColorCSS, getThemeAwareColorConfig } from '../utils/colors';
-import { useTheme } from '../hooks/useTheme';
+import { useTheme } from '../hooks/useTheme.jsx';
 import LabelBadges from './LabelBadges';
 import LabelPicker from './LabelPicker';
 import './NoteCard.css';

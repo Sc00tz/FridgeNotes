@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sun, Moon, Monitor, Palette, Eye } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
-import { useTheme } from '../hooks/useTheme';
+import { useTheme } from '../hooks/useTheme.jsx';
 import { NOTE_COLORS, getThemeAwareColorConfig } from '../utils/colors';
 
 /**

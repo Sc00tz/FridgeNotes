@@ -48,30 +48,30 @@ export default defineConfig({
         start_url: '/',
         icons: [
           {
-            src: 'pwa-64x64.png',
+            src: '/pwa-64x64.png',
             sizes: '64x64',
             type: 'image/png'
           },
           {
-            src: 'pwa-144x144.png', 
+            src: '/pwa-144x144.png', 
             sizes: '144x144',
             type: 'image/png',
             purpose: 'any'
           },
           {
-            src: 'pwa-192x192.png',
+            src: '/pwa-192x192.png',
             sizes: '192x192',
             type: 'image/png',
             purpose: 'any'
           },
           {
-            src: 'pwa-512x512.png',
+            src: '/pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any'
           },
           {
-            src: 'pwa-maskable-512x512.png',
+            src: '/pwa-maskable-512x512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable'
@@ -79,14 +79,14 @@ export default defineConfig({
         ],
         screenshots: [
           {
-            src: 'screenshots/wide-main.png',
+            src: '/screenshots/wide-main.png',
             sizes: '1280x720',
             type: 'image/png',
             form_factor: 'wide',
             label: 'Main interface showing notes in grid layout'
           },
           {
-            src: 'screenshots/mobile-main.png',
+            src: '/screenshots/mobile-main.png',
             sizes: '375x812',
             type: 'image/png',
             label: 'Mobile view of the main notes interface'

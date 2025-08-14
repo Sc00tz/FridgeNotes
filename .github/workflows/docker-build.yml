@@ -12,28 +12,6 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
       
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: 'fridgenotes-frontend/package-lock.json'
-      
-    - name: Install frontend dependencies
-      run: |
-        cd fridgenotes-frontend
-        npm ci
-        
-    - name: Build frontend
-      run: |
-        cd fridgenotes-frontend
-        npm run build
-        
-    - name: Verify build output
-      run: |
-        echo "Build completed. Contents of src/static:"
-        ls -la src/static/
-      
     - name: Log in to GitHub Container Registry
       uses: docker/login-action@v3
       with:

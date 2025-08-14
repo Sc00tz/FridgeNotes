@@ -39,7 +39,7 @@ class Note(db.Model):
             'position': self.position,
             'pinned': self.pinned,
             'archived': self.archived,
-            'reminder_datetime': self.reminder_datetime.strftime('%Y-%m-%dT%H:%M:%S') if self.reminder_datetime else None,
+            'reminder_datetime': (lambda dt: (print(f"MODEL DEBUG - Converting datetime {dt} to string: {dt.strftime('%Y-%m-%dT%H:%M:%S')}") or dt.strftime('%Y-%m-%dT%H:%M:%S')))(self.reminder_datetime) if self.reminder_datetime else None,
             'reminder_completed': self.reminder_completed,
             'reminder_snoozed_until': self.reminder_snoozed_until.strftime('%Y-%m-%dT%H:%M:%S') if self.reminder_snoozed_until else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,

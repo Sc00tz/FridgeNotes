@@ -12,9 +12,14 @@ const ReminderPicker = ({ reminder, onReminderChange, className = '' }) => {
   useEffect(() => {
     if (reminder) {
       // Handle the datetime string properly to avoid timezone conversion
+      console.log('FRONTEND DEBUG - Received reminder from backend:', reminder);
       const reminderDate = new Date(reminder);
-      setLocalDate(reminderDate.toISOString().split('T')[0]);
-      setLocalTime(reminderDate.toTimeString().slice(0, 5));
+      console.log('FRONTEND DEBUG - Parsed Date object:', reminderDate);
+      const isoDate = reminderDate.toISOString().split('T')[0];
+      const timeStr = reminderDate.toTimeString().slice(0, 5);
+      console.log('FRONTEND DEBUG - Setting localDate/localTime:', { isoDate, timeStr });
+      setLocalDate(isoDate);
+      setLocalTime(timeStr);
     } else {
       setLocalDate('');
       setLocalTime('');
@@ -26,6 +31,8 @@ const ReminderPicker = ({ reminder, onReminderChange, className = '' }) => {
       // Create datetime string without timezone info to be treated as local time
       // This way 10:40 PM local stays as 10:40 PM in the database
       const datetimeString = `${localDate}T${localTime}:00`;
+      console.log('FRONTEND DEBUG - Input values:', { localDate, localTime });
+      console.log('FRONTEND DEBUG - Sending datetime string:', datetimeString);
       onReminderChange(datetimeString);
     } else {
       onReminderChange(null);
@@ -123,7 +130,6 @@ const ReminderPicker = ({ reminder, onReminderChange, className = '' }) => {
                     type="date"
                     value={localDate}
                     onChange={(e) => setLocalDate(e.target.value)}
-                    min={new Date().toISOString().split('T')[0]}
                     className="pl-10"
                   />
                 </div>

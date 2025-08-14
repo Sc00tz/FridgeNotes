@@ -32,6 +32,8 @@ import { getColorConfig, generateColorCSS, getThemeAwareColorConfig } from '../u
 import { useTheme } from '../hooks/useTheme.jsx';
 import LabelBadges from './LabelBadges';
 import LabelPicker from './LabelPicker';
+import ReminderPicker from './ReminderPicker';
+import ReminderBadge from './ReminderBadge';
 import './NoteCard.css';
 
 const NoteCard = ({ 
@@ -65,6 +67,15 @@ const NoteCard = ({
   const handleCancel = () => {
     setEditedNote(note);
     onEditToggle(false);
+  };
+
+  const handleReminderChange = (reminderDateTime) => {
+    setEditedNote({
+      ...editedNote,
+      reminder_datetime: reminderDateTime,
+      reminder_completed: false, // Reset completion when reminder is changed
+      reminder_snoozed_until: null // Clear any snooze when reminder is changed
+    });
   };
 
   const handleChecklistItemToggle = (itemId, completed) => {
@@ -434,6 +445,23 @@ const NoteCard = ({
                 />
               </div>
             )}
+          </div>
+        )}
+
+        {/* Reminder - Show ReminderPicker when editing, ReminderBadge when viewing */}
+        {isEditing ? (
+          <div className="reminder-container mt-3">
+            <ReminderPicker
+              reminder={editedNote.reminder_datetime}
+              onReminderChange={handleReminderChange}
+            />
+          </div>
+        ) : (
+          <div className="reminder-container mt-3">
+            <ReminderBadge
+              reminder={note.reminder_datetime}
+              completed={note.reminder_completed}
+            />
           </div>
         )}
 

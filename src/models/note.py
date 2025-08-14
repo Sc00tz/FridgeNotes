@@ -14,6 +14,9 @@ class Note(db.Model):
     position = db.Column(db.Integer, nullable=False, default=0)  # NEW: Position for drag & drop
     pinned = db.Column(db.Boolean, nullable=False, default=False)  # NEW: Pinned field
     archived = db.Column(db.Boolean, default=False)
+    reminder_datetime = db.Column(db.DateTime, nullable=True)  # When to remind user
+    reminder_completed = db.Column(db.Boolean, default=False)  # Reminder acknowledged
+    reminder_snoozed_until = db.Column(db.DateTime, nullable=True)  # Snooze until this time
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -36,6 +39,9 @@ class Note(db.Model):
             'position': self.position,
             'pinned': self.pinned,
             'archived': self.archived,
+            'reminder_datetime': self.reminder_datetime.isoformat() if self.reminder_datetime else None,
+            'reminder_completed': self.reminder_completed,
+            'reminder_snoozed_until': self.reminder_snoozed_until.isoformat() if self.reminder_snoozed_until else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'checklist_items': [item.to_dict() for item in self.checklist_items] if self.note_type == 'checklist' else [],

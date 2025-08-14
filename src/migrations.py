@@ -552,6 +552,93 @@ def run_migration_005_add_pinned_field():
         if conn:
             conn.close()
 
+def run_migration_006_add_reminder_fields():
+    """Migration 006: Add reminder fields to notes table for date/time reminders"""
+    migration_name = "006_add_reminder_fields"
+    db_path = get_db_path()
+    
+    # Ensure the database directory exists
+    db_dir = os.path.dirname(db_path)
+    if db_dir and not os.path.exists(db_dir):
+        try:
+            os.makedirs(db_dir, exist_ok=True)
+            print(f"Created database directory: {db_dir}")
+        except Exception as e:
+            print(f"Warning: Could not create database directory {db_dir}: {e}")
+    
+    if not os.path.exists(db_path):
+        print(f"Database not found at {db_path}, will be created when app starts")
+        return True
+    
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Create migration tracking table
+        create_migration_table(cursor)
+        
+        # Check if this migration has already been applied
+        if is_migration_applied(cursor, migration_name):
+            print(f"✅ Migration {migration_name} already applied, skipping")
+            return True
+        
+        print(f"🔄 Applying migration {migration_name}...")
+        
+        # Add reminder_datetime column for when to remind user
+        print("   - Adding reminder_datetime column...")
+        cursor.execute('''
+            ALTER TABLE notes 
+            ADD COLUMN reminder_datetime DATETIME NULL
+        ''')
+        
+        # Add reminder_completed column for whether reminder was acknowledged
+        print("   - Adding reminder_completed column...")
+        cursor.execute('''
+            ALTER TABLE notes 
+            ADD COLUMN reminder_completed BOOLEAN NOT NULL DEFAULT FALSE
+        ''')
+        
+        # Add reminder_snoozed_until column for snooze functionality
+        print("   - Adding reminder_snoozed_until column...")
+        cursor.execute('''
+            ALTER TABLE notes 
+            ADD COLUMN reminder_snoozed_until DATETIME NULL
+        ''')
+        
+        # Create index for better performance when querying active reminders
+        print("   - Creating performance index for reminders...")
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_notes_reminders 
+            ON notes(reminder_datetime, reminder_completed, user_id)
+        ''')
+        
+        # Get count of notes for confirmation
+        cursor.execute("SELECT COUNT(*) FROM notes")
+        total_notes = cursor.fetchone()[0]
+        
+        # Mark migration as applied
+        mark_migration_applied(cursor, migration_name)
+        
+        conn.commit()
+        print(f"✅ Migration {migration_name} completed successfully!")
+        print(f"   - Added reminder_datetime column to notes table")
+        print(f"   - Added reminder_completed column to notes table")
+        print(f"   - Added reminder_snoozed_until column to notes table")
+        print(f"   - {total_notes} notes are ready for reminders")
+        print(f"   - Created performance index for reminder queries")
+        print(f"   - Date/time reminder functionality is now ready!")
+        return True
+        
+    except sqlite3.Error as e:
+        print(f"❌ Migration {migration_name} failed: {e}")
+        return False
+    except Exception as e:
+        print(f"❌ Unexpected error in Migration {migration_name}: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
 def run_all_migrations():
     """Run all pending migrations"""
     print("🚀 Starting automatic database migrations...")
@@ -577,6 +664,7 @@ def run_all_migrations():
         run_migration_003_create_labels_system,
         run_migration_004_add_position_field,  # NEW: Add position field for drag & drop
         run_migration_005_add_pinned_field,    # NEW: Add pinned field for note pinning
+        run_migration_006_add_reminder_fields, # NEW: Add reminder fields for date/time reminders
         # Add future migrations here
     ]
     

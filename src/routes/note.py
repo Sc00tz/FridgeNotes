@@ -8,6 +8,7 @@ from src.models.note import Note, ChecklistItem, SharedNote, db
 from src.models.user import User
 from src.services.note_service import get_notes_for_user, create_note, update_note, delete_note
 from src.websocket_events import broadcast_note_update, broadcast_checklist_toggle, broadcast_notes_reorder
+from datetime import datetime
 
 note_bp = Blueprint('note', __name__)
 
@@ -335,3 +336,100 @@ def toggle_note_pin(note_id):
         print(f"Error in toggle_note_pin: {e}")
         db.session.rollback()
         return jsonify({'error': 'Failed to update note pin status'}), 500
+
+# Reminder-specific endpoints
+@note_bp.route('/notes/<int:note_id>/reminder/complete', methods=['POST'])
+@login_required
+def complete_reminder(note_id):
+    """Mark a note's reminder as completed"""
+    try:
+        note = Note.query.get_or_404(note_id)
+        
+        # Check permissions
+        if note.user_id != current_user.id:
+            shared_note = SharedNote.query.filter_by(note_id=note_id, user_id=current_user.id).first()
+            if not shared_note or shared_note.access_level != 'edit':
+                return jsonify({'error': 'Access denied'}), 403
+        
+        # Mark reminder as completed
+        note.reminder_completed = True
+        note.reminder_snoozed_until = None  # Clear any snooze
+        db.session.commit()
+        
+        # Broadcast update
+        note_dict = note.to_dict(current_user_id=current_user.id)
+        broadcast_note_update(note_id, 'reminder_completed', note_dict)
+        
+        return jsonify({
+            'note_id': note_id,
+            'reminder_completed': True,
+            'message': 'Reminder marked as completed'
+        })
+        
+    except Exception as e:
+        print(f"Error in complete_reminder: {e}")
+        db.session.rollback()
+        return jsonify({'error': 'Failed to complete reminder'}), 500
+
+@note_bp.route('/notes/<int:note_id>/reminder/snooze', methods=['POST'])
+@login_required
+def snooze_reminder(note_id):
+    """Snooze a note's reminder until a specified time"""
+    try:
+        data = request.json
+        snooze_until = data.get('snooze_until')
+        
+        if not snooze_until:
+            return jsonify({'error': 'snooze_until is required'}), 400
+            
+        note = Note.query.get_or_404(note_id)
+        
+        # Check permissions
+        if note.user_id != current_user.id:
+            shared_note = SharedNote.query.filter_by(note_id=note_id, user_id=current_user.id).first()
+            if not shared_note or shared_note.access_level != 'edit':
+                return jsonify({'error': 'Access denied'}), 403
+        
+        # Parse and set snooze time
+        snooze_datetime = datetime.fromisoformat(snooze_until.replace('Z', '+00:00'))
+        note.reminder_snoozed_until = snooze_datetime
+        db.session.commit()
+        
+        # Broadcast update
+        note_dict = note.to_dict(current_user_id=current_user.id)
+        broadcast_note_update(note_id, 'reminder_snoozed', note_dict)
+        
+        return jsonify({
+            'note_id': note_id,
+            'reminder_snoozed_until': snooze_until,
+            'message': f'Reminder snoozed until {snooze_datetime.strftime("%Y-%m-%d %H:%M")}'
+        })
+        
+    except Exception as e:
+        print(f"Error in snooze_reminder: {e}")
+        db.session.rollback()
+        return jsonify({'error': 'Failed to snooze reminder'}), 500
+
+@note_bp.route('/notes/<int:note_id>/reminder/dismiss', methods=['POST'])
+@login_required
+def dismiss_reminder(note_id):
+    """Dismiss a reminder notification without completing it"""
+    try:
+        note = Note.query.get_or_404(note_id)
+        
+        # Check permissions
+        if note.user_id != current_user.id:
+            shared_note = SharedNote.query.filter_by(note_id=note_id, user_id=current_user.id).first()
+            if not shared_note:
+                return jsonify({'error': 'Access denied'}), 403
+        
+        # Just return success - this is mainly for frontend state management
+        # The reminder will still be active, just dismissed from notifications
+        return jsonify({
+            'note_id': note_id,
+            'message': 'Reminder notification dismissed'
+        })
+        
+    except Exception as e:
+        print(f"Error in dismiss_reminder: {e}")
+        return jsonify({'error': 'Failed to dismiss reminder'}), 500

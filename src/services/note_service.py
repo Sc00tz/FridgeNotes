@@ -142,6 +142,25 @@ def update_note(note_id, current_user_id, data):
     note.color = data.get('color', note.color)
     note.pinned = data.get('pinned', note.pinned)
     note.archived = data.get('archived', note.archived)
+    
+    # Update reminder fields if provided
+    if 'reminder_datetime' in data:
+        from datetime import datetime
+        if data['reminder_datetime']:
+            # Parse ISO string to datetime
+            note.reminder_datetime = datetime.fromisoformat(data['reminder_datetime'].replace('Z', '+00:00'))
+        else:
+            note.reminder_datetime = None
+    
+    if 'reminder_completed' in data:
+        note.reminder_completed = data.get('reminder_completed', note.reminder_completed)
+    
+    if 'reminder_snoozed_until' in data:
+        from datetime import datetime
+        if data['reminder_snoozed_until']:
+            note.reminder_snoozed_until = datetime.fromisoformat(data['reminder_snoozed_until'].replace('Z', '+00:00'))
+        else:
+            note.reminder_snoozed_until = None
 
     # If it's a checklist, update the checklist items.
     if note.note_type == 'checklist' and 'checklist_items' in data:

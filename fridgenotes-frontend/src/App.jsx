@@ -20,6 +20,7 @@ import UserProfileModal from './components/UserProfileModal';
 import AdminPanel from './components/AdminPanel';
 import LabelManagement from './components/LabelManagement';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
+import ReminderNotifications from './components/ReminderNotifications';
 
 // Custom hooks
 import { useAuth } from './hooks/useAuth';
@@ -104,6 +105,34 @@ function App() {
   // Reorder handler
   const handleReorderNotes = async (noteIds) => {
     await noteLabels.reorderNotes(noteIds);
+  };
+
+  // Reminder handlers
+  const handleCompleteReminder = async (noteId) => {
+    try {
+      await noteLabels.api.completeReminder(noteId);
+      await noteLabels.fetchNotes(); // Refresh notes to get updated state
+    } catch (error) {
+      console.error('Error completing reminder:', error);
+    }
+  };
+
+  const handleSnoozeReminder = async (noteId, snoozeUntil) => {
+    try {
+      await noteLabels.api.snoozeReminder(noteId, snoozeUntil);
+      await noteLabels.fetchNotes(); // Refresh notes to get updated state
+    } catch (error) {
+      console.error('Error snoozing reminder:', error);
+    }
+  };
+
+  const handleDismissReminder = async (noteId) => {
+    try {
+      await noteLabels.api.dismissReminder(noteId);
+      // Don't need to refresh notes for dismiss - it's just a UI action
+    } catch (error) {
+      console.error('Error dismissing reminder:', error);
+    }
   };
 
   // Loading screen
@@ -226,6 +255,14 @@ function App() {
           {auth.success || noteLabels.success || admin.success || share.success}
         </div>
       )}
+
+      {/* Reminder Notifications */}
+      <ReminderNotifications
+        notes={noteLabels.filteredNotes}
+        onMarkComplete={handleCompleteReminder}
+        onSnooze={handleSnoozeReminder}
+        onDismiss={handleDismissReminder}
+      />
 
       {/* PWA Install Prompt */}
       <PWAInstallPrompt />

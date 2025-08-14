@@ -290,6 +290,57 @@ class APIClient {
   }
 
   /**
+   * Mark a note's reminder as completed
+   * @param {number|string} noteId - Note ID
+   * @returns {Promise<Object>} Completion response
+   */
+  async completeReminder(noteId) {
+    if (!noteId) {
+      throw new Error('Note ID is required');
+    }
+
+    return this.makeRequest(`/notes/${noteId}/reminder/complete`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Snooze a note's reminder until a specified time
+   * @param {number|string} noteId - Note ID
+   * @param {string} snoozeUntil - ISO datetime string for when to show reminder again
+   * @returns {Promise<Object>} Snooze response
+   */
+  async snoozeReminder(noteId, snoozeUntil) {
+    if (!noteId) {
+      throw new Error('Note ID is required');
+    }
+
+    if (!snoozeUntil) {
+      throw new Error('Snooze until time is required');
+    }
+
+    return this.makeRequest(`/notes/${noteId}/reminder/snooze`, {
+      method: 'POST',
+      body: { snooze_until: snoozeUntil },
+    });
+  }
+
+  /**
+   * Dismiss a reminder notification without completing it
+   * @param {number|string} noteId - Note ID
+   * @returns {Promise<Object>} Dismiss response
+   */
+  async dismissReminder(noteId) {
+    if (!noteId) {
+      throw new Error('Note ID is required');
+    }
+
+    return this.makeRequest(`/notes/${noteId}/reminder/dismiss`, {
+      method: 'POST',
+    });
+  }
+
+  /**
    * Reorder notes for the current user
    * @param {Array<number>} noteIds - Array of note IDs in new order
    * @returns {Promise<Object>} Reorder response

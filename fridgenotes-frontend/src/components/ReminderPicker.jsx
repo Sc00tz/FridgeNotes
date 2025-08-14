@@ -23,9 +23,9 @@ const ReminderPicker = ({ reminder, onReminderChange, className = '' }) => {
 
   const handleDateTimeChange = () => {
     if (localDate && localTime) {
-      // Create datetime as if it's UTC to avoid timezone conversion issues
+      // Create datetime string without timezone info to be treated as local time
       // This way 10:40 PM local stays as 10:40 PM in the database
-      const datetimeString = `${localDate}T${localTime}:00.000Z`;
+      const datetimeString = `${localDate}T${localTime}:00`;
       onReminderChange(datetimeString);
     } else {
       onReminderChange(null);

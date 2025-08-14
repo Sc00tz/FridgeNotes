@@ -147,10 +147,8 @@ def update_note(note_id, current_user_id, data):
     if 'reminder_datetime' in data:
         from datetime import datetime
         if data['reminder_datetime']:
-            # Parse ISO string as local time (remove Z and treat as naive datetime)
-            # This prevents timezone conversion issues
-            iso_string = data['reminder_datetime'].replace('Z', '').replace('T', ' ')
-            note.reminder_datetime = datetime.fromisoformat(iso_string)
+            # Parse ISO string as local time - frontend now sends format like "2024-08-14T22:40:00"
+            note.reminder_datetime = datetime.fromisoformat(data['reminder_datetime'])
         else:
             note.reminder_datetime = None
     
@@ -160,9 +158,8 @@ def update_note(note_id, current_user_id, data):
     if 'reminder_snoozed_until' in data:
         from datetime import datetime
         if data['reminder_snoozed_until']:
-            # Parse ISO string as local time (remove Z and treat as naive datetime)
-            iso_string = data['reminder_snoozed_until'].replace('Z', '').replace('T', ' ')
-            note.reminder_snoozed_until = datetime.fromisoformat(iso_string)
+            # Parse ISO string as local time
+            note.reminder_snoozed_until = datetime.fromisoformat(data['reminder_snoozed_until'])
         else:
             note.reminder_snoozed_until = None
 

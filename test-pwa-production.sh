@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # PWA Production Testing Script
-# Run this to test your PWA deployment on https://your-domain.com
+# Run this to test your PWA deployment on your production domain
 
-BASE_URL="https://notes.scootz.net"
+BASE_URL="https://your-domain.com"
 echo "🔍 Testing PWA deployment at: $BASE_URL"
 echo "=================================================="
 

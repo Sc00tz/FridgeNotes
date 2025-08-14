@@ -41,8 +41,11 @@ const ReminderPicker = ({ reminder, onReminderChange, className = '' }) => {
     
     const reminderDate = new Date(reminder);
     const now = new Date();
-    const diffMs = reminderDate.getTime() - now.getTime();
-    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    
+    // Compare just the dates (ignore time) to determine if it's today, tomorrow, etc.
+    const reminderDateOnly = new Date(reminderDate.getFullYear(), reminderDate.getMonth(), reminderDate.getDate());
+    const nowDateOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const diffDays = Math.round((reminderDateOnly.getTime() - nowDateOnly.getTime()) / (1000 * 60 * 60 * 24));
     
     const timeStr = reminderDate.toLocaleTimeString([], { 
       hour: '2-digit', 

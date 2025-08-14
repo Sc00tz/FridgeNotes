@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Clock, CheckCircle, Snooze, X } from 'lucide-react';
+import { Bell, Clock, CheckCircle, AlarmClock, X } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 
@@ -134,7 +134,7 @@ const ReminderNotifications = ({ notes = [], onMarkComplete, onSnooze, onDismiss
                 onClick={() => handleSnooze(note.id, 15)}
                 className="flex items-center gap-1"
               >
-                <Snooze size={14} />
+                <AlarmClock size={14} />
                 15m
               </Button>
               <Button
@@ -143,7 +143,7 @@ const ReminderNotifications = ({ notes = [], onMarkComplete, onSnooze, onDismiss
                 onClick={() => handleSnooze(note.id, 60)}
                 className="flex items-center gap-1"
               >
-                <Snooze size={14} />
+                <AlarmClock size={14} />
                 1h
               </Button>
             </div>

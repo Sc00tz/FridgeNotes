@@ -8,21 +8,46 @@ const ReminderNotifications = ({ notes = [], onMarkComplete, onSnooze, onDismiss
 
   // Filter notes that have active reminders
   useEffect(() => {
+    console.log('NOTIFICATION DEBUG - All notes:', notes);
     const now = new Date();
+    console.log('NOTIFICATION DEBUG - Current time:', now);
+    
     const reminders = notes.filter(note => {
-      if (!note.reminder_datetime || note.reminder_completed) return false;
+      console.log('NOTIFICATION DEBUG - Checking note:', {
+        id: note.id,
+        title: note.title,
+        reminder_datetime: note.reminder_datetime,
+        reminder_completed: note.reminder_completed,
+        reminder_snoozed_until: note.reminder_snoozed_until
+      });
+      
+      if (!note.reminder_datetime || note.reminder_completed) {
+        console.log('NOTIFICATION DEBUG - Filtered out: no reminder or completed');
+        return false;
+      }
       
       const reminderTime = new Date(note.reminder_datetime);
       const snoozeTime = note.reminder_snoozed_until ? new Date(note.reminder_snoozed_until) : null;
       
+      console.log('NOTIFICATION DEBUG - Times:', {
+        reminderTime,
+        snoozeTime,
+        now,
+        isReminderDue: reminderTime <= now
+      });
+      
       // Show if reminder time has passed and not snoozed, or snooze time has passed
       if (snoozeTime && snoozeTime > now) {
+        console.log('NOTIFICATION DEBUG - Still snoozed');
         return false; // Still snoozed
       }
       
-      return reminderTime <= now;
+      const shouldShow = reminderTime <= now;
+      console.log('NOTIFICATION DEBUG - Should show notification:', shouldShow);
+      return shouldShow;
     });
 
+    console.log('NOTIFICATION DEBUG - Active reminders found:', reminders);
     setActiveReminders(reminders);
   }, [notes]);
 

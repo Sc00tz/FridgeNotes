@@ -11,6 +11,7 @@ const ReminderPicker = ({ reminder, onReminderChange, className = '' }) => {
   // Parse existing reminder when component mounts or reminder prop changes
   useEffect(() => {
     if (reminder) {
+      // Handle the datetime string properly to avoid timezone conversion
       const reminderDate = new Date(reminder);
       setLocalDate(reminderDate.toISOString().split('T')[0]);
       setLocalTime(reminderDate.toTimeString().slice(0, 5));
@@ -22,8 +23,10 @@ const ReminderPicker = ({ reminder, onReminderChange, className = '' }) => {
 
   const handleDateTimeChange = () => {
     if (localDate && localTime) {
-      const datetime = new Date(`${localDate}T${localTime}`);
-      onReminderChange(datetime.toISOString());
+      // Create datetime as if it's UTC to avoid timezone conversion issues
+      // This way 10:40 PM local stays as 10:40 PM in the database
+      const datetimeString = `${localDate}T${localTime}:00.000Z`;
+      onReminderChange(datetimeString);
     } else {
       onReminderChange(null);
     }

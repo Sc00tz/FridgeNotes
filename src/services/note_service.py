@@ -147,7 +147,7 @@ def update_note(note_id, current_user_id, data):
     if 'reminder_datetime' in data:
         from datetime import datetime
         if data['reminder_datetime']:
-            # Parse ISO string as local time - frontend now sends format like "2024-08-14T22:40:00"
+            # Parse ISO string as local time - frontend sends format like "2024-08-14T22:40:00"
             note.reminder_datetime = datetime.fromisoformat(data['reminder_datetime'])
         else:
             note.reminder_datetime = None

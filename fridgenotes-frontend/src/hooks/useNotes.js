@@ -139,25 +139,37 @@ export const useNotes = (currentUser, isAuthenticated) => {
           const userNotes = await loadNotes();
           
           // Wait for WebSocket connection then join rooms
+          let connectionTimeout;
           const waitForConnection = () => {
             if (socketClient.isConnected && userNotes) {
               userNotes.forEach(note => {
                 socketClient.joinNote(note.id);
                 joinedRoomsRef.current.add(note.id);
               });
-            } else {
-              setTimeout(waitForConnection, 100);
+            } else if (socketClient.socket) {
+              connectionTimeout = setTimeout(waitForConnection, 100);
             }
           };
           waitForConnection();
+          
+          // Cleanup timeout
+          return () => {
+            if (connectionTimeout) {
+              clearTimeout(connectionTimeout);
+            }
+          };
         } catch (error) {
           // Silently handle setup errors
         }
       };
 
-      setupNotesAndRooms();
+      const cleanupSetup = setupNotesAndRooms();
 
-      return () => {
+      return async () => {
+        // Cleanup setup timeout if needed
+        if (cleanupSetup && typeof cleanupSetup === 'function') {
+          cleanupSetup();
+        }
         
         // Leave all rooms
         if (joinedRoomsRef.current.size > 0) {

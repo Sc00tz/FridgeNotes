@@ -11,6 +11,7 @@ class WebSocketManager {
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 5;
     this.reconnectDelay = 1000;
+    this.reconnectTimeout = null;
     
     // Get the base URL for the socket connection
     // Use the current window location 
@@ -73,10 +74,16 @@ class WebSocketManager {
     this.socket.on('disconnect', (reason) => {
       this.isConnected = false;
       
+      // Clear any existing reconnect timeout
+      if (this.reconnectTimeout) {
+        clearTimeout(this.reconnectTimeout);
+        this.reconnectTimeout = null;
+      }
+      
       // Don't clear joinedNotes here so we can rejoin on reconnect
       if (reason === 'io server disconnect') {
         // Server initiated disconnect, try to reconnect manually
-        setTimeout(() => {
+        this.reconnectTimeout = setTimeout(() => {
           if (!this.isConnected && this.currentUserId) {
             this.connect(this.currentUserId);
           }
@@ -127,6 +134,12 @@ class WebSocketManager {
 
   disconnect() {
     if (this.socket) {
+      
+      // Clear any pending reconnect timeout
+      if (this.reconnectTimeout) {
+        clearTimeout(this.reconnectTimeout);
+        this.reconnectTimeout = null;
+      }
       
       // Leave all joined notes first
       this.joinedNotes.forEach(noteId => {

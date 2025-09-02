@@ -1,8 +1,31 @@
+"""
+FridgeNotes Backend - Main Flask Application
+
+This is the primary Flask application that serves as the backend for FridgeNotes,
+a self-hosted note-taking application with real-time collaboration features.
+
+Key Features:
+- Real-time WebSocket communication for collaborative editing
+- Automatic admin user creation with secure password generation
+- RESTful API with proper error handling
+- Database migrations and schema management
+- PWA (Progressive Web App) support
+- Session-based authentication with Flask-Login
+
+Architecture:
+- Flask backend with SQLAlchemy ORM
+- WebSocket support via Flask-SocketIO
+- Modular route blueprints for clean separation
+- Automatic database initialization and migrations
+"""
+
 import os
 import sys
 import secrets
 import string
-# DON'T CHANGE THIS !!!
+
+# Path setup for proper module imports
+# DON'T CHANGE THIS - Required for Docker and various deployment scenarios
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from flask import Flask, send_from_directory
@@ -23,10 +46,19 @@ from src.routes.label import label_bp
 from src.websocket_events import socketio
 from src.error_handlers import register_error_handlers
 
+def log_with_flush(message):
+    """Print message and force flush to ensure it appears in Docker logs"""
+    print(message)
+    sys.stdout.flush()
+
+# Initialize Flask application with static folder for serving built frontend
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
+
+# Security configuration - use environment variable in production
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_secret_key')
 
-# Enable CORS for all routes
+# Enable Cross-Origin Resource Sharing for frontend-backend communication
+# This allows the React frontend (running on different port in development) to communicate with Flask
 CORS(app, supports_credentials=True)
 
 # Add security headers for PWA behind proxy
@@ -55,7 +87,12 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 # Initialize SocketIO
-socketio.init_app(app, cors_allowed_origins="*")
+try:
+    socketio.init_app(app, cors_allowed_origins="*")
+    log_with_flush("✅ SocketIO initialized successfully")
+except Exception as e:
+    log_with_flush(f"⚠️ SocketIO initialization failed: {e}")
+    log_with_flush("📋 App will continue without real-time features")
 
 # Register blueprints
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -104,36 +141,58 @@ app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
 db.init_app(app)
 
 def generate_secure_password(length=10):
-    """Generate a secure random password"""
-    # Use uppercase, lowercase, and digits
+    """
+    Generate a cryptographically secure random password for admin account creation.
+    
+    Uses Python's secrets module for cryptographic randomness. Ensures password complexity
+    by including at least one uppercase letter, one lowercase letter, and one digit.
+    
+    Args:
+        length (int): Password length, minimum 3 (default: 10)
+        
+    Returns:
+        str: Secure random password meeting complexity requirements
+    """
+    # Character sets for password generation
     alphabet = string.ascii_letters + string.digits
-    # Ensure at least one of each type
+    
+    # Ensure password contains at least one of each required type
     password = [
-        secrets.choice(string.ascii_uppercase),
-        secrets.choice(string.ascii_lowercase), 
-        secrets.choice(string.digits)
+        secrets.choice(string.ascii_uppercase),  # At least one uppercase
+        secrets.choice(string.ascii_lowercase),  # At least one lowercase
+        secrets.choice(string.digits)            # At least one digit
     ]
-    # Fill the rest with random choices
+    
+    # Fill remaining positions with random characters from full alphabet
     for _ in range(length - 3):
         password.append(secrets.choice(alphabet))
     
-    # Shuffle the password list to avoid predictable patterns
+    # Shuffle the password to prevent predictable patterns (uppercase first, etc.)
     secrets.SystemRandom().shuffle(password)
+    
     return ''.join(password)
 
-def log_with_flush(message):
-    """Print message and force flush to ensure it appears in Docker logs"""
-    print(message)
-    sys.stdout.flush()
-
 def create_initial_admin():
-    """Create initial admin user if no users exist"""
+    """
+    Create initial admin user for first-time application setup.
+    
+    This function runs during application initialization to ensure there's always
+    an admin account available. Only creates an admin if no users exist in the database.
+    
+    Security considerations:
+    - Uses cryptographically secure password generation
+    - Displays password prominently in logs for Docker/production environments
+    - Password is only shown once and cannot be recovered
+    
+    Returns:
+        User: Created admin user object, or None if users already exist
+    """
     try:
-        # Check if ANY users exist
+        # Check if ANY users exist in the database
         user_count = User.query.count()
         
         if user_count == 0:
-            # Generate a secure random password
+            # Generate a secure random password for the admin account
             admin_password = generate_secure_password(10)
             
             # Create the admin user
@@ -274,5 +333,5 @@ if __name__ == '__main__':
         socketio.run(app, host='0.0.0.0', port=5009, debug=False, allow_unsafe_werkzeug=True)
     else:
         log_with_flush("🔧 Starting in development mode...")
-        # Development settings
-        socketio.run(app, host='0.0.0.0', port=5009, debug=True)
+        # Development settings - use Flask's built-in server for Python 3.13 compatibility
+        app.run(host='0.0.0.0', port=5009, debug=True)

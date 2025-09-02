@@ -9,7 +9,9 @@ import {
   ArchiveRestore,
   LogOut,
   Shield,
-  Tag
+  Tag,
+  Database,
+  ChefHat
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -29,6 +31,8 @@ const AppHeader = ({
   onOpenProfile,
   onOpenAdmin,
   onOpenLabels,
+  onOpenImportExport,
+  onOpenRecipe,
   onLogout 
 }) => {
   return (
@@ -90,6 +94,14 @@ const AppHeader = ({
               <DropdownMenuItem onClick={onOpenProfile}>
                 <Settings className="mr-2 h-4 w-4" />
                 Profile
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onOpenImportExport}>
+                <Database className="mr-2 h-4 w-4" />
+                Import/Export
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onOpenRecipe}>
+                <ChefHat className="mr-2 h-4 w-4" />
+                Recipe to Shopping List
               </DropdownMenuItem>
               {currentUser?.is_admin && (
                 <DropdownMenuItem onClick={onOpenAdmin}>

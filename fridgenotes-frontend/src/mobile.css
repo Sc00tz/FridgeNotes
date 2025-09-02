@@ -52,7 +52,42 @@ html {
   /* Make sure text doesn't extend beyond screen */
   .text-sm, .text-base, .font-medium {
     word-wrap: break-word;
-    overflow-wrap: break-word;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  
+  /* Ensure all text content wraps properly on mobile */
+  p, span, div, h1, h2, h3, h4, h5, h6 {
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+  }
+  
+  /* Special handling for pre-formatted text that might contain URLs */
+  pre, .whitespace-pre-wrap {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    max-width: 100%;
+  }
+  
+  /* Ensure text inputs and textareas handle long content */
+  input, textarea {
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+  }
+  
+  /* Fix for elements that might contain URLs or long strings */
+  .whitespace-pre-wrap,
+  .text-container-safe,
+  .break-words-anywhere {
+    word-wrap: break-word !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
   }
 }
 

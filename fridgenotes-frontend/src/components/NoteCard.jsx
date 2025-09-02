@@ -34,6 +34,7 @@ import LabelBadges from './LabelBadges';
 import LabelPicker from './LabelPicker';
 import ReminderPicker from './ReminderPicker';
 import ReminderBadge from './ReminderBadge';
+import ChecklistItemAutocomplete from './ChecklistItemAutocomplete';
 import './NoteCard.css';
 
 const NoteCard = ({ 
@@ -49,7 +50,9 @@ const NoteCard = ({
   allLabels = [],
   onPinToggle,
   isEditing,
-  onEditToggle 
+  onEditToggle,
+  userAutocompleteItems = [],
+  onAutocompleteAdd
 }) => {
   const [editedNote, setEditedNote] = useState(note);
   const [newChecklistItem, setNewChecklistItem] = useState('');
@@ -97,11 +100,12 @@ const NoteCard = ({
     }
   };
 
-  const handleAddChecklistItem = () => {
-    if (newChecklistItem.trim()) {
+  const handleAddChecklistItem = (itemText = null) => {
+    const textToAdd = itemText || newChecklistItem.trim();
+    if (textToAdd) {
       const newItem = {
         id: Date.now(), // Temporary ID
-        text: newChecklistItem.trim(),
+        text: textToAdd,
         completed: false,
         order: editedNote.checklist_items.length
       };
@@ -111,6 +115,11 @@ const NoteCard = ({
       };
       setEditedNote(updatedNote);
       setNewChecklistItem('');
+      
+      // Add to user's autocomplete data
+      if (onAutocompleteAdd && typeof onAutocompleteAdd === 'function') {
+        onAutocompleteAdd(textToAdd);
+      }
     }
   };
 
@@ -299,7 +308,7 @@ const NoteCard = ({
               className="min-h-[100px] border-none p-0 resize-none focus-visible:ring-0"
             />
           ) : (
-            <div className="whitespace-pre-wrap text-sm leading-relaxed">
+            <div className="whitespace-pre-wrap-break text-sm leading-relaxed text-container-safe">
               {note.content || (
                 <span className="text-muted-foreground italic">Empty note</span>
               )}
@@ -361,7 +370,7 @@ const NoteCard = ({
                       </Button>
                     </div>
                   ) : (
-                    <span className="text-sm flex-1">
+                    <span className="text-sm flex-1 text-container-safe break-words-anywhere">
                       {item.text}
                     </span>
                   )}
@@ -416,7 +425,7 @@ const NoteCard = ({
                             </Button>
                           </div>
                         ) : (
-                          <span className="text-sm flex-1 line-through text-muted-foreground">
+                          <span className="text-sm flex-1 line-through text-muted-foreground text-container-safe break-words-anywhere">
                             {item.text}
                           </span>
                         )}
@@ -431,17 +440,13 @@ const NoteCard = ({
             {isEditing && (
               <div className="flex items-center space-x-2 pt-2">
                 <Plus className="h-4 w-4 text-muted-foreground mt-0.5" />
-                <Input
+                <ChecklistItemAutocomplete
                   value={newChecklistItem}
-                  onChange={(e) => setNewChecklistItem(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddChecklistItem();
-                    }
-                  }}
+                  onChange={setNewChecklistItem}
+                  onSelect={handleAddChecklistItem}
                   placeholder="Add item..."
-                  className="text-sm border-none p-0 h-auto focus-visible:ring-0"
+                  userItems={userAutocompleteItems}
+                  className="flex-1"
                 />
               </div>
             )}

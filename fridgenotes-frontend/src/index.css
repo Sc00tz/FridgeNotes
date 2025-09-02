@@ -57,3 +57,37 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  /* Word wrapping utilities for handling long URLs and text */
+  .break-words-anywhere {
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    hyphens: auto;
+  }
+  
+  /* More aggressive breaking for URLs and long strings */
+  .break-all-urls {
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+    word-break: break-all;
+    line-break: anywhere;
+  }
+  
+  /* Preserve formatting but allow breaking */
+  .whitespace-pre-wrap-break {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  
+  /* Safe text container that prevents overflow */
+  .text-container-safe {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+}

@@ -21,12 +21,19 @@ import AdminPanel from './components/AdminPanel';
 import LabelManagement from './components/LabelManagement';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import ReminderNotifications from './components/ReminderNotifications';
+import ListTemplatesDialog from './components/ListTemplatesDialog';
+import OfflineSyncStatus from './components/OfflineSyncStatus';
+import ImportExportDialog from './components/ImportExportDialog';
+import RecipeToShoppingDialog from './components/RecipeToShoppingDialog';
 
 // Custom hooks
 import { useAuth } from './hooks/useAuth';
 import { useAdmin } from './hooks/useAdmin';
 import { useShare } from './hooks/useShare';
 import useNoteLabels from './hooks/useNoteLabels';
+import { useAutocomplete } from './hooks/useAutocomplete';
+import { useTemplates } from './hooks/useTemplates';
+import { useImportExport } from './hooks/useImportExport';
 import { ThemeProvider } from './hooks/useTheme.jsx';
 
 import './App.css';
@@ -38,11 +45,20 @@ function App() {
   const admin = useAdmin(auth.currentUser);
   const noteLabels = useNoteLabels(auth.currentUser, auth.isAuthenticated);
   const share = useShare();
+  const autocomplete = useAutocomplete(auth.currentUser);
+  const templates = useTemplates(auth.currentUser);
+  const importExport = useImportExport(
+    auth.currentUser, 
+    noteLabels.notes, 
+    noteLabels.labels, 
+    noteLabels.createNote, 
+    noteLabels.createLabel
+  );
 
   // UI state only
   const [modals, setModals] = useState({
     login: false, register: false, profile: false, admin: false, 
-    labels: false, createNote: false
+    labels: false, createNote: false, templates: false, importExport: false, recipe: false
   });
 
   const [form, setForm] = useState({
@@ -51,6 +67,13 @@ function App() {
   });
 
   useEffect(() => { auth.checkAuthStatus(); }, []);
+  
+  // Learn from existing notes when they're loaded
+  useEffect(() => {
+    if (noteLabels.notes.length > 0) {
+      autocomplete.learnFromNotes(noteLabels.notes);
+    }
+  }, [noteLabels.notes, autocomplete.learnFromNotes]);
 
   const openModal = useCallback((name) => setModals(prev => ({ ...prev, [name]: true })), []);
   const closeModal = useCallback((name) => setModals(prev => ({ ...prev, [name]: false })), []);
@@ -135,6 +158,55 @@ function App() {
     }
   };
 
+  // Template handlers
+  const handleCreateNoteFromTemplate = async (templateData) => {
+    try {
+      const noteData = {
+        user_id: auth.currentUser.id,
+        ...templateData
+      };
+      const newNote = await noteLabels.createNote(noteData);
+      setForm(prev => ({ ...prev, editingNoteId: newNote.id }));
+      
+      // Update template usage statistics
+      if (templateData.templateId) {
+        await templates.useTemplate(templateData.templateId);
+      }
+      
+      closeModal('templates');
+    } catch (error) {
+      console.error('Failed to create note from template:', error);
+    }
+  };
+
+  const handleSaveAsTemplate = async (templateData) => {
+    try {
+      await templates.createTemplate(templateData);
+    } catch (error) {
+      console.error('Failed to save template:', error);
+    }
+  };
+
+  // Recipe handlers
+  const handleCreateShoppingListFromRecipe = async (shoppingListData) => {
+    try {
+      const noteData = {
+        user_id: auth.currentUser.id,
+        ...shoppingListData
+      };
+      const newNote = await noteLabels.createNote(noteData);
+      setForm(prev => ({ ...prev, editingNoteId: newNote.id }));
+      closeModal('recipe');
+    } catch (error) {
+      console.error('Failed to create shopping list from recipe:', error);
+    }
+  };
+
+  const getCurrentEditingNote = () => {
+    if (!form.editingNoteId) return null;
+    return noteLabels.notes.find(note => note.id === form.editingNoteId);
+  };
+
   // Loading screen
   if (auth.loading && !auth.currentUser) {
     return (
@@ -198,6 +270,8 @@ function App() {
         onOpenProfile={() => openModal('profile')}
         onOpenAdmin={() => openModal('admin')}
         onOpenLabels={() => openModal('labels')}
+        onOpenImportExport={() => openModal('importExport')}
+        onOpenRecipe={() => openModal('recipe')}
         onLogout={handleLogout}
       />
 
@@ -209,6 +283,7 @@ function App() {
             noteType={form.newNoteType}
             onNoteTypeChange={(type) => setForm(prev => ({ ...prev, newNoteType: type }))}
             onCreate={handleCreateNote}
+            onOpenTemplates={() => openModal('templates')}
           />
         </div>
 
@@ -221,6 +296,8 @@ function App() {
           onPinToggle={noteLabels.pinToggle}
           onEditToggle={(noteId) => setForm(prev => ({ ...prev, editingNoteId: noteId }))}
           onReorder={handleReorderNotes}
+          userAutocompleteItems={autocomplete.userItems}
+          onAutocompleteAdd={autocomplete.addItem}
         />
       </main>
 
@@ -244,6 +321,39 @@ function App() {
         onDeleteLabel={noteLabels.deleteLabel}
         loading={noteLabels.loading} />
 
+      <ListTemplatesDialog 
+        isOpen={modals.templates} 
+        onClose={() => closeModal('templates')}
+        onCreateNoteFromTemplate={handleCreateNoteFromTemplate}
+        onSaveAsTemplate={handleSaveAsTemplate}
+        currentNote={getCurrentEditingNote()}
+        templates={templates.templates}
+        onDeleteTemplate={templates.deleteTemplate}
+      />
+
+      <ImportExportDialog
+        isOpen={modals.importExport}
+        onClose={() => closeModal('importExport')}
+        onExportJSON={importExport.exportToJSON}
+        onExportCSV={importExport.exportToCSV}
+        onImportJSON={importExport.importFromJSON}
+        stats={importExport.stats}
+        isProcessing={importExport.isProcessing}
+        progress={importExport.progress}
+        error={importExport.error}
+        success={importExport.success}
+        onClearMessages={() => {
+          importExport.clearError();
+          importExport.clearSuccess();
+        }}
+      />
+
+      <RecipeToShoppingDialog
+        isOpen={modals.recipe}
+        onClose={() => closeModal('recipe')}
+        onCreateShoppingList={handleCreateShoppingListFromRecipe}
+      />
+
       {/* Status messages */}
       {(auth.error || noteLabels.error || admin.error || share.error) && (
         <div className="fixed bottom-4 right-4 bg-destructive text-destructive-foreground px-4 py-2 rounded-md z-50">
@@ -266,6 +376,17 @@ function App() {
 
       {/* PWA Install Prompt */}
       <PWAInstallPrompt />
+
+      {/* Offline Sync Status */}
+      <OfflineSyncStatus
+        isOnline={noteLabels.offlineSync?.isOnline}
+        isSyncing={noteLabels.offlineSync?.isSyncing}
+        queueSize={noteLabels.offlineSync?.queueSize}
+        lastSync={noteLabels.offlineSync?.lastSync}
+        syncErrors={noteLabels.offlineSync?.syncErrors}
+        onForceSync={noteLabels.offlineSync?.forcSync}
+        onClearQueue={noteLabels.offlineSync?.clearSyncQueue}
+      />
     </div>
   );
 }

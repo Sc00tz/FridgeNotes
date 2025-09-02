@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { 
   Plus, 
   List,
-  FileText
+  FileText,
+  LayoutTemplate
 } from 'lucide-react';
 import {
   Dialog,
@@ -26,7 +27,8 @@ const CreateNoteDialog = ({
   onOpenChange, 
   noteType, 
   onNoteTypeChange, 
-  onCreate 
+  onCreate,
+  onOpenTemplates 
 }) => {
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -63,11 +65,24 @@ const CreateNoteDialog = ({
               </SelectItem>
             </SelectContent>
           </Select>
-          <div className="flex justify-end space-x-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+          <div className="flex justify-between">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                onOpenChange(false);
+                if (onOpenTemplates) onOpenTemplates();
+              }}
+              className="flex items-center"
+            >
+              <LayoutTemplate className="h-4 w-4 mr-2" />
+              Use Template
             </Button>
-            <Button onClick={onCreate}>Create</Button>
+            <div className="flex space-x-2">
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button onClick={onCreate}>Create</Button>
+            </div>
           </div>
         </div>
       </DialogContent>

@@ -8,10 +8,14 @@ handling all database interactions and business rules.
 from src.models.note import Note, ChecklistItem, SharedNote, db
 from src.models.user import User
 from src.websocket_events import broadcast_note_update, broadcast_checklist_toggle, broadcast_notes_reorder
-from sqlalchemy.orm import joinedload, subqueryload
+from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy import and_, or_
 
 def get_notes_for_user(user_id):
-    """Gets all notes for a given user, including shared notes.
+    """
+    Gets all notes for a given user, including shared notes.
+    
+    OPTIMIZED: Single query with better loading strategies to reduce database hits.
 
     Args:
         user_id: The ID of the user to fetch notes for.
@@ -19,39 +23,60 @@ def get_notes_for_user(user_id):
     Returns:
         A list of note dictionaries.
     """
-    # Get user's own notes, ordered by pinned status first, then by position.
-    own_notes = Note.query.options(
-        subqueryload(Note.checklist_items),
-        joinedload(Note.labels),
-        subqueryload(Note.shared_notes)
-    ).filter_by(user_id=user_id).order_by(Note.pinned.desc(), Note.position.asc()).all()
-
-    # Get notes shared with the user that they have not hidden.
-    # This includes a fallback for older database schemas that may not have the
-    # 'hidden_by_recipient' column yet.
     try:
-        shared_notes_query = db.session.query(Note).options(
-            subqueryload(Note.checklist_items),
-            joinedload(Note.labels),
-            subqueryload(Note.shared_notes)
-        ).join(SharedNote).filter(
-            SharedNote.user_id == user_id,
-            SharedNote.hidden_by_recipient == False
-        ).all()
+        # OPTIMIZATION: Single optimized query that gets both owned and shared notes
+        # Using selectinload instead of subqueryload for better performance with many notes
+        notes_query = db.session.query(Note).options(
+            selectinload(Note.checklist_items),  # More efficient than subqueryload for 1:many
+            joinedload(Note.labels),             # Good for many:many with reasonable label counts
+            selectinload(Note.shared_notes)      # More efficient loading
+        ).filter(
+            or_(
+                # User's own notes
+                Note.user_id == user_id,
+                # Notes shared with user (not hidden)
+                and_(
+                    Note.shared_notes.any(
+                        and_(
+                            SharedNote.user_id == user_id,
+                            SharedNote.hidden_by_recipient == False
+                        )
+                    )
+                )
+            )
+        ).order_by(Note.pinned.desc(), Note.position.asc()).all()
+        
     except Exception as e:
-        print(f"Warning: Error filtering hidden shared notes, falling back to all shared notes: {e}")
-        # Fallback for older schemas: get all shared notes.
-        shared_note_ids = db.session.query(SharedNote.note_id).filter_by(user_id=user_id).all()
-        shared_notes_query = Note.query.options(
-            subqueryload(Note.checklist_items),
-            joinedload(Note.labels),
-            subqueryload(Note.shared_notes)
-        ).filter(Note.id.in_([id[0] for id in shared_note_ids])).all()
-
-    # Combine the user's own notes and shared notes, removing duplicates.
-    all_notes = {note.id: note for note in own_notes + shared_notes_query}
+        print(f"Warning: Error in optimized query, falling back to legacy method: {e}")
+        # Fallback to original separate queries if there's a schema issue
+        return _get_notes_for_user_legacy(user_id)
 
     # Convert the note objects to dictionaries for the API response.
+    return [note.to_dict(current_user_id=user_id) for note in notes_query]
+
+def _get_notes_for_user_legacy(user_id):
+    """Legacy fallback method for older database schemas."""
+    # Get user's own notes
+    own_notes = Note.query.options(
+        selectinload(Note.checklist_items),
+        joinedload(Note.labels),
+        selectinload(Note.shared_notes)
+    ).filter_by(user_id=user_id).order_by(Note.pinned.desc(), Note.position.asc()).all()
+
+    # Get shared notes (fallback for missing hidden_by_recipient column)
+    shared_note_ids = db.session.query(SharedNote.note_id).filter_by(user_id=user_id).all()
+    if shared_note_ids:
+        shared_notes_query = Note.query.options(
+            selectinload(Note.checklist_items),
+            joinedload(Note.labels),
+            selectinload(Note.shared_notes)
+        ).filter(Note.id.in_([id[0] for id in shared_note_ids])).all()
+    else:
+        shared_notes_query = []
+
+    # Combine notes, removing duplicates
+    all_notes = {note.id: note for note in own_notes + shared_notes_query}
+    
     return [note.to_dict(current_user_id=user_id) for note in all_notes.values()]
 
 def create_note(user_id, data):
@@ -88,7 +113,8 @@ def create_note(user_id, data):
                 note_id=note.id,
                 text=item_data['text'],
                 completed=item_data.get('completed', False),
-                order=i
+                order=i,
+                category=item_data.get('category')
             )
             db.session.add(item)
 
@@ -148,11 +174,7 @@ def update_note(note_id, current_user_id, data):
         from datetime import datetime
         if data['reminder_datetime']:
             # Parse ISO string as local time - frontend sends format like "2024-08-14T22:40:00"
-            print(f"BACKEND DEBUG - Received reminder_datetime: '{data['reminder_datetime']}'")
-            parsed_dt = datetime.fromisoformat(data['reminder_datetime'])
-            print(f"BACKEND DEBUG - Parsed datetime object: {parsed_dt}")
-            note.reminder_datetime = parsed_dt
-            print(f"BACKEND DEBUG - Stored in note.reminder_datetime: {note.reminder_datetime}")
+            note.reminder_datetime = datetime.fromisoformat(data['reminder_datetime'])
         else:
             note.reminder_datetime = None
     
@@ -175,7 +197,8 @@ def update_note(note_id, current_user_id, data):
                 note_id=note_id,
                 text=item_data['text'],
                 completed=item_data.get('completed', False),
-                order=i
+                order=i,
+                category=item_data.get('category')
             )
             db.session.add(item)
 

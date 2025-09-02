@@ -1,24 +1,56 @@
+"""
+WebSocket Event Handlers for FridgeNotes Real-time Collaboration
+
+This module handles all WebSocket communication for real-time features:
+- Note content synchronization across multiple clients
+- User presence in note editing sessions  
+- Checklist item toggling
+- Note sharing notifications
+- Drag-and-drop reordering
+
+Architecture:
+- Uses Flask-SocketIO for WebSocket support
+- Room-based communication (one room per note)
+- Connection tracking for user presence
+- Broadcast helpers for API-triggered events
+"""
+
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask import request
 import json
 
+# Initialize SocketIO instance with CORS enabled for cross-origin requests
 socketio = SocketIO(cors_allowed_origins="*")
 
-# Store active connections and their associated notes
+# Track active WebSocket connections and their associated data
+# Structure: {session_id: {'user_id': int, 'notes': set(note_ids)}}
 active_connections = {}
 
 @socketio.on('connect')
 def handle_connect():
+    """
+    Handle new WebSocket connection.
+    
+    Initializes connection tracking for the new client session.
+    Each connection maintains user info and set of note rooms they're subscribed to.
+    """
     print(f'Client {request.sid} connected')
     active_connections[request.sid] = {'user_id': None, 'notes': set()}
 
 @socketio.on('disconnect')
 def handle_disconnect():
+    """
+    Handle WebSocket disconnection and cleanup.
+    
+    Removes the client from all note rooms they were subscribed to
+    and cleans up connection tracking data.
+    """
     print(f'Client {request.sid} disconnected')
     if request.sid in active_connections:
-        # Leave all note rooms
+        # Leave all note rooms this client was subscribed to
         for note_id in active_connections[request.sid]['notes']:
             leave_room(f'note_{note_id}')
+        # Clean up connection data
         del active_connections[request.sid]
 
 @socketio.on('join_note')

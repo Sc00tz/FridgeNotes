@@ -17,7 +17,9 @@ const NotesGrid = ({
   allLabels,
   onPinToggle,
   onEditToggle,
-  onReorder
+  onReorder,
+  userAutocompleteItems = [],
+  onAutocompleteAdd
 }) => {
   const [draggedNoteId, setDraggedNoteId] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
@@ -284,6 +286,8 @@ const NotesGrid = ({
               onEditToggle={(editing) => onEditToggle(editing ? note.id : null)}
               isDragging={isDragging}
               isBeingDragged={isBeingDragged}
+              userAutocompleteItems={userAutocompleteItems}
+              onAutocompleteAdd={onAutocompleteAdd}
             />
           </div>
         );

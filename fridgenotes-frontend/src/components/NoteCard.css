@@ -112,3 +112,37 @@
   background-color: #f3f4f6;
   transform: scale(1.05);
 }
+
+/* Text wrapping improvements for note content */
+.note-card .whitespace-pre-wrap,
+.note-card .text-container-safe {
+  /* Handle long URLs and unbreakable text */
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* Specific handling for very long strings (URLs, etc) */
+.note-card .break-words-anywhere {
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-break: anywhere;
+  hyphens: auto;
+}
+
+/* Ensure checklist items don't overflow on mobile */
+@media (max-width: 768px) {
+  .note-card .flex-1 {
+    min-width: 0;
+    flex-shrink: 1;
+  }
+  
+  .note-card span.text-sm {
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+}

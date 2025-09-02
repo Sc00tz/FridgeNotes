@@ -1,3 +1,23 @@
+/**
+ * ReminderNotifications Component
+ * 
+ * Displays active reminder notifications for notes with due reminders.
+ * Handles reminder completion, snoozing, and dismissal actions.
+ * 
+ * Features:
+ * - Shows reminders that are due (past reminder_datetime)
+ * - Respects snooze functionality (hides until snooze expires)  
+ * - Browser notifications for recent reminders
+ * - Quick action buttons for complete/snooze/dismiss
+ * - Time-since-due formatting (e.g., "2h ago", "1d ago")
+ * 
+ * Props:
+ *   notes: Array of note objects to check for reminders
+ *   onMarkComplete: Function to mark reminder as completed
+ *   onSnooze: Function to snooze reminder for specified duration
+ *   onDismiss: Function to dismiss reminder from UI (doesn't mark complete)
+ */
+
 import React, { useState, useEffect } from 'react';
 import { Bell, Clock, CheckCircle, AlarmClock, X } from 'lucide-react';
 import { Button } from './ui/button';
@@ -6,51 +26,45 @@ import { Card } from './ui/card';
 const ReminderNotifications = ({ notes = [], onMarkComplete, onSnooze, onDismiss }) => {
   const [activeReminders, setActiveReminders] = useState([]);
 
-  // Filter notes that have active reminders
+  /**
+   * Filter notes to find those with active (due) reminders.
+   * 
+   * A reminder is considered active if:
+   * 1. Note has a reminder_datetime set
+   * 2. Reminder is not marked as completed
+   * 3. Current time is past the reminder time
+   * 4. Reminder is not currently snoozed (or snooze time has expired)
+   */
   useEffect(() => {
-    console.log('NOTIFICATION DEBUG - All notes:', notes);
     const now = new Date();
-    console.log('NOTIFICATION DEBUG - Current time:', now);
     
     const reminders = notes.filter(note => {
-      console.log('NOTIFICATION DEBUG - Checking note:', {
-        id: note.id,
-        title: note.title,
-        reminder_datetime: note.reminder_datetime,
-        reminder_completed: note.reminder_completed,
-        reminder_snoozed_until: note.reminder_snoozed_until
-      });
-      
+      // Skip notes without reminders or completed reminders
       if (!note.reminder_datetime || note.reminder_completed) {
-        console.log('NOTIFICATION DEBUG - Filtered out: no reminder or completed');
         return false;
       }
       
       const reminderTime = new Date(note.reminder_datetime);
       const snoozeTime = note.reminder_snoozed_until ? new Date(note.reminder_snoozed_until) : null;
       
-      console.log('NOTIFICATION DEBUG - Times:', {
-        reminderTime,
-        snoozeTime,
-        now,
-        isReminderDue: reminderTime <= now
-      });
-      
-      // Show if reminder time has passed and not snoozed, or snooze time has passed
+      // If snoozed and snooze period hasn't expired, don't show
       if (snoozeTime && snoozeTime > now) {
-        console.log('NOTIFICATION DEBUG - Still snoozed');
-        return false; // Still snoozed
+        return false;
       }
       
-      const shouldShow = reminderTime <= now;
-      console.log('NOTIFICATION DEBUG - Should show notification:', shouldShow);
-      return shouldShow;
+      // Show reminder if current time is past the reminder time
+      return reminderTime <= now;
     });
 
-    console.log('NOTIFICATION DEBUG - Active reminders found:', reminders);
     setActiveReminders(reminders);
   }, [notes]);
 
+  /**
+   * Format how long ago a reminder was due in human-readable form.
+   * 
+   * Returns relative time strings like "2m ago", "3h ago", "1d ago"
+   * for reminders that are overdue.
+   */
   const formatReminderTime = (reminderDateTime) => {
     const reminderDate = new Date(reminderDateTime);
     const now = new Date();
@@ -59,6 +73,7 @@ const ReminderNotifications = ({ notes = [], onMarkComplete, onSnooze, onDismiss
     const diffHours = Math.floor(diffMinutes / 60);
     const diffDays = Math.floor(diffHours / 24);
     
+    // Format based on time elapsed since reminder was due
     if (diffMinutes < 1) {
       return 'Just now';
     } else if (diffMinutes < 60) {
@@ -117,12 +132,12 @@ const ReminderNotifications = ({ notes = [], onMarkComplete, onSnooze, onDismiss
         <Card key={note.id} className="p-4 bg-white border-l-4 border-l-blue-500 shadow-lg">
           <div className="flex items-start gap-3">
             <Bell className="text-blue-500 mt-1" size={20} />
-            <div className="flex-1 min-w-0">
-              <h4 className="font-medium text-gray-900 truncate">
+            <div className="flex-1 min-w-0 text-container-safe">
+              <h4 className="font-medium text-gray-900 break-words-anywhere">
                 {note.title || 'Untitled Note'}
               </h4>
               {note.content && (
-                <p className="text-sm text-gray-600 mt-1 line-clamp-2">
+                <p className="text-sm text-gray-600 mt-1 line-clamp-2 break-words-anywhere">
                   {note.content.substring(0, 100)}
                   {note.content.length > 100 && '...'}
                 </p>

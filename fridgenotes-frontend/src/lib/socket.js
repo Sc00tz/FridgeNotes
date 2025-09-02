@@ -9,9 +9,17 @@ class WebSocketManager {
     this.joinedNotes = new Set();
     this.eventListeners = new Map();
     this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 5;
-    this.reconnectDelay = 1000;
+    this.maxReconnectAttempts = 3; // OPTIMIZED: Reduced from 5 to limit reconnection storms
+    this.reconnectDelay = 2000;    // OPTIMIZED: Increased base delay
     this.reconnectTimeout = null;
+    
+    // OPTIMIZATION: Add throttling for WebSocket events
+    this.eventThrottleMs = 100;    // Throttle events to max 10/second
+    this.lastEventTime = new Map();
+    
+    // OPTIMIZATION: Batch note room operations
+    this.pendingRoomOperations = new Set();
+    this.roomOperationTimeout = null;
     
     // Get the base URL for the socket connection
     // Use the current window location 
@@ -161,39 +169,85 @@ class WebSocketManager {
       return;
     }
 
-    if (this.socket && this.isConnected && this.currentUserId) {
-      this.socket.emit('join_note', {
-        note_id: noteId,
-        user_id: this.currentUserId
+    // OPTIMIZATION: Batch room operations to reduce WebSocket overhead
+    this.pendingRoomOperations.add({ type: 'join', noteId });
+    this._processPendingRoomOperations();
+  }
+
+  _processPendingRoomOperations() {
+    // OPTIMIZATION: Debounce room operations to batch multiple joins/leaves
+    if (this.roomOperationTimeout) {
+      clearTimeout(this.roomOperationTimeout);
+    }
+    
+    this.roomOperationTimeout = setTimeout(() => {
+      if (!this.socket || !this.isConnected || !this.currentUserId) {
+        return;
+      }
+
+      // Process all pending operations in batch
+      const operations = Array.from(this.pendingRoomOperations);
+      this.pendingRoomOperations.clear();
+
+      operations.forEach(op => {
+        if (op.type === 'join' && !this.joinedNotes.has(op.noteId)) {
+          this.socket.emit('join_note', {
+            note_id: op.noteId,
+            user_id: this.currentUserId
+          });
+          this.joinedNotes.add(op.noteId);
+        } else if (op.type === 'leave' && this.joinedNotes.has(op.noteId)) {
+          this.socket.emit('leave_note', {
+            note_id: op.noteId,
+            user_id: this.currentUserId
+          });
+          this.joinedNotes.delete(op.noteId);
+        }
       });
-      this.joinedNotes.add(noteId);
-    } 
+    }, 50); // 50ms debounce for room operations
   }
 
   leaveNote(noteId) {
     if (!noteId) {
       return;
     }
-    if (this.socket && this.isConnected && this.currentUserId) {
-      this.socket.emit('leave_note', {
-        note_id: noteId,
-        user_id: this.currentUserId
-      });
-      this.joinedNotes.delete(noteId);
+    
+    // OPTIMIZATION: Batch room operations to reduce WebSocket overhead
+    this.pendingRoomOperations.add({ type: 'leave', noteId });
+    this._processPendingRoomOperations();
+  }
+
+  // OPTIMIZATION: Add event throttling
+  _shouldThrottleEvent(eventKey) {
+    const now = Date.now();
+    const lastTime = this.lastEventTime.get(eventKey) || 0;
+    
+    if (now - lastTime < this.eventThrottleMs) {
+      return true; // Should throttle
     }
+    
+    this.lastEventTime.set(eventKey, now);
+    return false; // Don't throttle
   }
 
   // Emit events
   emitNoteUpdate(noteId, updateType, data) {
-    if (this.socket && this.isConnected && this.currentUserId) {
-      this.socket.emit('note_updated', {
-        note_id: noteId,
-        user_id: this.currentUserId,
-        update_type: updateType,
-        data: data
-      });
-    } else {
+    if (!this.socket || !this.isConnected || !this.currentUserId) {
+      return;
     }
+
+    // OPTIMIZATION: Throttle note update events to prevent flooding
+    const eventKey = `note_update_${noteId}_${updateType}`;
+    if (this._shouldThrottleEvent(eventKey)) {
+      return; // Skip this event due to throttling
+    }
+
+    this.socket.emit('note_updated', {
+      note_id: noteId,
+      user_id: this.currentUserId,
+      update_type: updateType,
+      data: data
+    });
   }
 
   emitChecklistItemToggle(noteId, itemId, completed) {

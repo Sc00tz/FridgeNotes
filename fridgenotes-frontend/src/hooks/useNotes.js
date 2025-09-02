@@ -1,12 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import apiClient from '../lib/api';
 import socketClient from '../lib/socket';
+import { useOfflineSync } from './useOfflineSync';
 
 export const useNotes = (currentUser, isAuthenticated) => {
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+
+  // Initialize offline sync
+  const offlineSync = useOfflineSync(apiClient, currentUser);
 
   // Refs for WebSocket room management
   const joinedRoomsRef = useRef(new Set());
@@ -123,9 +127,18 @@ export const useNotes = (currentUser, isAuthenticated) => {
     }
   }, [isAuthenticated, currentUser, showError]);
 
-  // Setup WebSocket when authenticated
+  // OPTIMIZED: Setup WebSocket when authenticated with better cleanup
   useEffect(() => {
-    if (isAuthenticated && currentUser) {
+    if (!isAuthenticated || !currentUser) {
+      return;
+    }
+
+    let mounted = true;
+    let connectionTimeout = null;
+    
+    const setupWebSocket = async () => {
+      if (!mounted) return;
+      
       socketClient.connect(currentUser.id);
 
       // Set up event listeners
@@ -133,79 +146,108 @@ export const useNotes = (currentUser, isAuthenticated) => {
       socketClient.onChecklistItemToggle(handleChecklistToggle);
       socketClient.onNotesReordered(handleNotesReordered);
 
-      // Load notes and join rooms
-      const setupNotesAndRooms = async () => {
-        try {
-          const userNotes = await loadNotes();
+      try {
+        const userNotes = await loadNotes();
+        
+        if (!mounted) return; // Check if still mounted after async operation
+        
+        // OPTIMIZATION: Debounced room joining to reduce WebSocket overhead
+        const joinRoomsDebounced = () => {
+          if (!mounted || !socketClient.isConnected || !userNotes) return;
           
-          // Wait for WebSocket connection then join rooms
-          let connectionTimeout;
-          const waitForConnection = () => {
-            if (socketClient.isConnected && userNotes) {
-              userNotes.forEach(note => {
-                socketClient.joinNote(note.id);
-                joinedRoomsRef.current.add(note.id);
-              });
-            } else if (socketClient.socket) {
-              connectionTimeout = setTimeout(waitForConnection, 100);
+          userNotes.forEach(note => {
+            socketClient.joinNote(note.id);
+            joinedRoomsRef.current.add(note.id);
+          });
+        };
+        
+        // Wait for connection with timeout
+        if (socketClient.isConnected) {
+          joinRoomsDebounced();
+        } else {
+          connectionTimeout = setTimeout(() => {
+            if (mounted && socketClient.isConnected) {
+              joinRoomsDebounced();
             }
-          };
-          waitForConnection();
-          
-          // Cleanup timeout
-          return () => {
-            if (connectionTimeout) {
-              clearTimeout(connectionTimeout);
-            }
-          };
-        } catch (error) {
-          // Silently handle setup errors
-        }
-      };
-
-      const cleanupSetup = setupNotesAndRooms();
-
-      return async () => {
-        // Cleanup setup timeout if needed
-        if (cleanupSetup && typeof cleanupSetup === 'function') {
-          cleanupSetup();
+          }, 1000); // Single timeout instead of polling
         }
         
-        // Leave all rooms
-        if (joinedRoomsRef.current.size > 0) {
-          joinedRoomsRef.current.forEach(noteId => {
-            socketClient.leaveNote(noteId);
-          });
-          joinedRoomsRef.current.clear();
+      } catch (error) {
+        if (mounted) {
+          showError('Failed to setup real-time connection');
         }
+      }
+    };
 
-        // Remove event listeners
-        socketClient.offNoteUpdate(handleNoteUpdate);
-        socketClient.offChecklistItemToggle(handleChecklistToggle);
-        socketClient.offNotesReordered(handleNotesReordered);
-        socketClient.disconnect();
-      };
-    }
-  }, [isAuthenticated, currentUser, handleNoteUpdate, handleChecklistToggle, handleNotesReordered, loadNotes]);
+    setupWebSocket();
+
+    // OPTIMIZED: Cleanup function with better resource management
+    return () => {
+      mounted = false;
+      
+      // Clear timeout
+      if (connectionTimeout) {
+        clearTimeout(connectionTimeout);
+      }
+      
+      // Leave all rooms efficiently
+      const roomsToLeave = Array.from(joinedRoomsRef.current);
+      roomsToLeave.forEach(noteId => {
+        socketClient.leaveNote(noteId);
+      });
+      joinedRoomsRef.current.clear();
+
+      // Remove event listeners with the same function references
+      socketClient.offNoteUpdate(handleNoteUpdate);
+      socketClient.offChecklistItemToggle(handleChecklistToggle);
+      socketClient.offNotesReordered(handleNotesReordered);
+      
+      socketClient.disconnect();
+    };
+  }, [isAuthenticated, currentUser]); // OPTIMIZED: Removed function dependencies to prevent excessive re-runs
 
   // Note operations
   const createNote = useCallback(async (noteData) => {
     try {
       setLoading(true);
-      const newNote = await apiClient.createNote(noteData);
-      setNotes(prevNotes => [newNote, ...prevNotes]);
-      if (socketClient.isConnected) {
-        socketClient.joinNote(newNote.id);
-        joinedRoomsRef.current.add(newNote.id);
+      
+      // Try with offline sync support
+      const result = await offlineSync.executeWithOfflineSupport({
+        type: 'create_note',
+        data: noteData
+      });
+      
+      if (result.success) {
+        const newNote = result.result;
+        setNotes(prevNotes => [newNote, ...prevNotes]);
+        if (socketClient.isConnected) {
+          socketClient.joinNote(newNote.id);
+          joinedRoomsRef.current.add(newNote.id);
+        }
+        return newNote;
+      } else if (result.queued) {
+        // Operation queued for offline - create optimistic update
+        const optimisticNote = {
+          id: `temp_${Date.now()}`,
+          ...noteData,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          _offline: true, // Mark as offline
+          _operationId: result.operationId
+        };
+        setNotes(prevNotes => [optimisticNote, ...prevNotes]);
+        showSuccess('Note will sync when back online');
+        return optimisticNote;
+      } else {
+        throw new Error('Failed to create note');
       }
-      return newNote;
     } catch (error) {
       showError('Failed to create note: ' + error.message);
       throw error;
     } finally {
       setLoading(false);
     }
-  }, [showError]);
+  }, [showError, offlineSync]);
 
   const updateNote = useCallback(async (noteIdOrNote, updatedNote) => {
     try {
@@ -356,6 +398,10 @@ export const useNotes = (currentUser, isAuthenticated) => {
     updateChecklistItem,
     reorderNotes,
     pinToggle,
-    setNotes // For external updates (like label changes)
+    setNotes, // For external updates (like label changes)
+
+    // Offline sync
+    offlineSync,
+    api: apiClient // Expose API for other hooks
   };
 };

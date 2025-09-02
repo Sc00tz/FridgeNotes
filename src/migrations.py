@@ -582,28 +582,42 @@ def run_migration_006_add_reminder_fields():
             print(f"✅ Migration {migration_name} already applied, skipping")
             return True
         
+        # Check if notes table exists
+        if not check_table_exists(cursor, 'notes'):
+            print("notes table doesn't exist yet, skipping migration")
+            return True
+        
         print(f"🔄 Applying migration {migration_name}...")
         
         # Add reminder_datetime column for when to remind user
-        print("   - Adding reminder_datetime column...")
-        cursor.execute('''
-            ALTER TABLE notes 
-            ADD COLUMN reminder_datetime DATETIME NULL
-        ''')
+        if not check_column_exists(cursor, 'notes', 'reminder_datetime'):
+            print("   - Adding reminder_datetime column...")
+            cursor.execute('''
+                ALTER TABLE notes 
+                ADD COLUMN reminder_datetime DATETIME NULL
+            ''')
+        else:
+            print("   - reminder_datetime column already exists")
         
         # Add reminder_completed column for whether reminder was acknowledged
-        print("   - Adding reminder_completed column...")
-        cursor.execute('''
-            ALTER TABLE notes 
-            ADD COLUMN reminder_completed BOOLEAN NOT NULL DEFAULT FALSE
-        ''')
+        if not check_column_exists(cursor, 'notes', 'reminder_completed'):
+            print("   - Adding reminder_completed column...")
+            cursor.execute('''
+                ALTER TABLE notes 
+                ADD COLUMN reminder_completed BOOLEAN NOT NULL DEFAULT FALSE
+            ''')
+        else:
+            print("   - reminder_completed column already exists")
         
         # Add reminder_snoozed_until column for snooze functionality
-        print("   - Adding reminder_snoozed_until column...")
-        cursor.execute('''
-            ALTER TABLE notes 
-            ADD COLUMN reminder_snoozed_until DATETIME NULL
-        ''')
+        if not check_column_exists(cursor, 'notes', 'reminder_snoozed_until'):
+            print("   - Adding reminder_snoozed_until column...")
+            cursor.execute('''
+                ALTER TABLE notes 
+                ADD COLUMN reminder_snoozed_until DATETIME NULL
+            ''')
+        else:
+            print("   - reminder_snoozed_until column already exists")
         
         # Create index for better performance when querying active reminders
         print("   - Creating performance index for reminders...")
@@ -627,6 +641,113 @@ def run_migration_006_add_reminder_fields():
         print(f"   - {total_notes} notes are ready for reminders")
         print(f"   - Created performance index for reminder queries")
         print(f"   - Date/time reminder functionality is now ready!")
+        return True
+        
+    except sqlite3.Error as e:
+        print(f"❌ Migration {migration_name} failed: {e}")
+        return False
+    except Exception as e:
+        print(f"❌ Unexpected error in Migration {migration_name}: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def run_migration_007_create_performance_indexes():
+    """Migration 007: Create performance indexes for better query performance"""
+    migration_name = "007_create_performance_indexes"
+    db_path = get_db_path()
+    
+    # Ensure the database directory exists
+    db_dir = os.path.dirname(db_path)
+    if db_dir and not os.path.exists(db_dir):
+        try:
+            os.makedirs(db_dir, exist_ok=True)
+            print(f"Created database directory: {db_dir}")
+        except Exception as e:
+            print(f"Warning: Could not create database directory {db_dir}: {e}")
+    
+    if not os.path.exists(db_path):
+        print(f"Database not found at {db_path}, will be created when app starts")
+        return True
+    
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Create migration tracking table
+        create_migration_table(cursor)
+        
+        # Check if this migration has already been applied
+        if is_migration_applied(cursor, migration_name):
+            print(f"✅ Migration {migration_name} already applied")
+            return True
+        
+        print(f"📝 Running Migration {migration_name}: Creating performance indexes...")
+        
+        # Index for notes queries by user_id (most common query)
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_notes_user_id_pinned_position 
+            ON notes(user_id, pinned DESC, position ASC)
+        ''')
+        print("   - Created index on notes(user_id, pinned, position)")
+        
+        # Index for shared notes queries
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_shared_notes_user_id_hidden 
+            ON shared_notes(user_id, hidden_by_recipient)
+        ''')
+        print("   - Created index on shared_notes(user_id, hidden_by_recipient)")
+        
+        # Index for shared notes by note_id (for joins)
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_shared_notes_note_id 
+            ON shared_notes(note_id)
+        ''')
+        print("   - Created index on shared_notes(note_id)")
+        
+        # Index for checklist items by note_id
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_checklist_items_note_id_order 
+            ON checklist_items(note_id, `order`)
+        ''')
+        print("   - Created index on checklist_items(note_id, order)")
+        
+        # Index for note-label associations
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_note_labels_note_id 
+            ON note_labels(note_id)
+        ''')
+        print("   - Created index on note_labels(note_id)")
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_note_labels_label_id 
+            ON note_labels(label_id)
+        ''')
+        print("   - Created index on note_labels(label_id)")
+        
+        # Index for labels by user_id
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_labels_user_id 
+            ON labels(user_id)
+        ''')
+        print("   - Created index on labels(user_id)")
+        
+        # Index for reminder queries
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_notes_reminder_datetime 
+            ON notes(reminder_datetime) 
+            WHERE reminder_datetime IS NOT NULL
+        ''')
+        print("   - Created index on notes(reminder_datetime)")
+        
+        # Mark migration as applied
+        mark_migration_applied(cursor, migration_name)
+        
+        conn.commit()
+        print(f"✅ Migration {migration_name} completed successfully!")
+        print(f"   - Created 8 performance indexes")
+        print(f"   - Database queries should now be significantly faster")
         return True
         
     except sqlite3.Error as e:
@@ -665,6 +786,7 @@ def run_all_migrations():
         run_migration_004_add_position_field,  # NEW: Add position field for drag & drop
         run_migration_005_add_pinned_field,    # NEW: Add pinned field for note pinning
         run_migration_006_add_reminder_fields, # NEW: Add reminder fields for date/time reminders
+        run_migration_007_create_performance_indexes, # NEW: Create performance indexes
         # Add future migrations here
     ]
     

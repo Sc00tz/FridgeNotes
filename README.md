@@ -7,10 +7,16 @@ A modern **Progressive Web App** for collaborative note-taking, perfect for fami
 - 📱 **Progressive Web App** - Install on phones, tablets & desktops
 - 🌙 **Dark Mode** - Beautiful light/dark themes with system preference detection  
 - 🔄 **Real-time Collaboration** - Share notes with family members instantly
-- 📶 **Offline Support** - Works completely without internet after installation
+- 📶 **Enhanced Offline Support** - Works completely without internet with smart sync queue
 - 🏷️ **Smart Labels** - Organize notes with color-coded labels and autocomplete
 - ✅ **Shopping Lists** - Interactive checklists perfect for grocery shopping
+- 🧠 **Smart Autocomplete** - Learns from your shopping habits with 50+ common items
+- 📋 **List Templates** - Built-in and custom templates for quick list creation
 - 🎨 **Note Colors** - Personalize notes with beautiful color themes
+- ⏰ **Reminders** - Set date/time reminders with snooze functionality
+- 📌 **Note Pinning** - Pin important notes to the top
+- 🎯 **Drag & Drop** - Reorder notes with intuitive drag and drop
+- 💾 **Import/Export** - Full data backup and restore with JSON/CSV support
 - 🔒 **Self-Hosted** - Complete control over your family's data
 - ⚡ **Fast & Responsive** - Optimized for mobile and desktop use
 

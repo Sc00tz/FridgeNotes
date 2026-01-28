@@ -10,10 +10,11 @@ This module handles all WebSocket communication for real-time features:
 
 Architecture:
 - Uses Flask-SocketIO for WebSocket support
-- Room-based communication (one room per note)
+- Room-based communication (primarily one room per user)
 - Connection tracking for user presence
 - Broadcast helpers for API-triggered events
 """
+
 
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask import request
@@ -53,9 +54,26 @@ def handle_disconnect():
         # Clean up connection data
         del active_connections[request.sid]
 
+@socketio.on('join_user')
+def handle_join_user(data):
+    """Join a user-specific room for general updates"""
+    user_id = data.get('user_id')
+    if not user_id:
+        return
+    
+    # Update connection info
+    if request.sid in active_connections:
+        active_connections[request.sid]['user_id'] = user_id
+    
+    # Join the private user room
+    join_room(f'user_{user_id}')
+    print(f'User {user_id} joined their private room')
+    emit('joined_user', {'user_id': user_id, 'message': f'Connected to user {user_id} room'})
+
 @socketio.on('join_note')
 def handle_join_note(data):
-    """Join a note room for real-time updates"""
+    """Join a note room for real-time presence/editing updates"""
+
     note_id = data['note_id']
     user_id = data['user_id']
     
@@ -165,25 +183,45 @@ def handle_notes_reordered(data):
 
 def broadcast_note_update(note_id, update_type, data, exclude_user=None):
     """Helper function to broadcast updates from API endpoints"""
-    socketio.emit('note_update_received', {
-        'note_id': note_id,
-        'update_type': update_type,
-        'data': data
-    }, room=f'note_{note_id}')
+    # OPTIMIZATION: Broadcast to the user's private room instead of individual note rooms
+    # This assumes the 'data' or context provides the user_id
+    user_id = data.get('user_id')
+    if user_id:
+        socketio.emit('note_update_received', {
+            'note_id': note_id,
+            'update_type': update_type,
+            'data': data
+        }, room=f'user_{user_id}')
+    else:
+        # Fallback to note room if user_id is unknown
+        socketio.emit('note_update_received', {
+            'note_id': note_id,
+            'update_type': update_type,
+            'data': data
+        }, room=f'note_{note_id}')
 
 def broadcast_checklist_toggle(note_id, item_id, completed, user_id=None):
     """Helper function to broadcast checklist toggles from API endpoints"""
-    socketio.emit('checklist_item_toggle_received', {
-        'note_id': note_id,
-        'item_id': item_id,
-        'completed': completed,
-        'user_id': user_id
-    }, room=f'note_{note_id}')
+    if user_id:
+        socketio.emit('checklist_item_toggle_received', {
+            'note_id': note_id,
+            'item_id': item_id,
+            'completed': completed,
+            'user_id': user_id
+        }, room=f'user_{user_id}')
+    else:
+        socketio.emit('checklist_item_toggle_received', {
+            'note_id': note_id,
+            'item_id': item_id,
+            'completed': completed,
+            'user_id': user_id
+        }, room=f'note_{note_id}')
 
 def broadcast_notes_reorder(user_id, note_ids):
     """Helper function to broadcast notes reordering from API endpoints"""
     socketio.emit('notes_reorder_received', {
         'user_id': user_id,
         'note_ids': note_ids
-    }, broadcast=True)
+    }, room=f'user_{user_id}')
+
 

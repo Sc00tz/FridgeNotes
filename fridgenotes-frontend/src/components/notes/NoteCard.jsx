@@ -5,12 +5,12 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { 
-  MoreVertical, 
-  Edit, 
-  Trash2, 
-  Share, 
-  Archive, 
+import {
+  MoreVertical,
+  Edit,
+  Trash2,
+  Share,
+  Archive,
   ArchiveRestore,
   Plus,
   X,
@@ -27,21 +27,22 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import ColorPicker from './ColorPicker';
-import { getColorConfig, generateColorCSS, getThemeAwareColorConfig } from '../utils/colors';
-import { useTheme } from '../hooks/useTheme.jsx';
-import LabelBadges from './LabelBadges';
-import LabelPicker from './LabelPicker';
-import ReminderPicker from './ReminderPicker';
-import ReminderBadge from './ReminderBadge';
+import ColorPicker from '../ui/ColorPicker';
+import { getColorConfig, generateColorCSS, getThemeAwareColorConfig } from '../../utils/colors';
+import { useTheme } from '../../hooks/useTheme.jsx';
+import LabelBadges from '../labels/LabelBadges';
+import LabelPicker from '../labels/LabelPicker';
+import ReminderPicker from '../reminders/ReminderPicker';
+import ReminderBadge from '../reminders/ReminderBadge';
 import ChecklistItemAutocomplete from './ChecklistItemAutocomplete';
 import './NoteCard.css';
 
-const NoteCard = ({ 
-  note, 
-  onUpdate, 
-  onDelete, 
-  onShare, 
+
+const NoteCard = ({
+  note,
+  onUpdate,
+  onDelete,
+  onShare,
   onChecklistItemUpdate,
   onHideSharedNote,
   onLabelClick,
@@ -88,7 +89,7 @@ const NoteCard = ({
     );
     const updatedNote = { ...editedNote, checklist_items: updatedItems };
     setEditedNote(updatedNote);
-    
+
     // Call parent update function only if it exists and is a function
     if (onChecklistItemUpdate && typeof onChecklistItemUpdate === 'function') {
       onChecklistItemUpdate(itemId, { completed });
@@ -115,7 +116,7 @@ const NoteCard = ({
       };
       setEditedNote(updatedNote);
       setNewChecklistItem('');
-      
+
       // Add to user's autocomplete data
       if (onAutocompleteAdd && typeof onAutocompleteAdd === 'function') {
         onAutocompleteAdd(textToAdd);
@@ -152,7 +153,7 @@ const NoteCard = ({
   // Separate active and completed items
   const activeItems = (editedNote.checklist_items || []).filter(item => !item.completed);
   const completedItems = (editedNote.checklist_items || []).filter(item => item.completed);
-  
+
   const completedCount = completedItems.length;
   const totalCount = (editedNote.checklist_items || []).length;
 
@@ -164,7 +165,7 @@ const NoteCard = ({
   const colorStyles = generateColorCSS(note.color || 'default', isDark);
 
   return (
-    <Card 
+    <Card
       className={`
         note-card transition-all duration-200 hover:shadow-lg border-2
         ${note.pinned ? 'ring-2 ring-blue-200' : ''} 
@@ -194,34 +195,33 @@ const NoteCard = ({
               </h3>
             )}
           </div>
-          
+
           <div className="flex items-center space-x-1">
             {/* Pin Button */}
             <Button
               variant="ghost"
               size="sm"
-              className={`h-8 w-8 p-0 transition-opacity border border-transparent hover:border-gray-200 rounded-sm ${
-                note.pinned ? 'opacity-100 text-yellow-600' : 'opacity-30 hover:opacity-100'
-              }`}
+              className={`h-8 w-8 p-0 transition-opacity border border-transparent hover:border-gray-200 rounded-sm ${note.pinned ? 'opacity-100 text-yellow-600' : 'opacity-30 hover:opacity-100'
+                }`}
               onClick={handlePinToggle}
               title={note.pinned ? 'Unpin note' : 'Pin note'}
             >
               {note.pinned ? <Pin className="h-4 w-4" /> : <PinOff className="h-4 w-4" />}
             </Button>
-            
+
             {/* Color Picker */}
-            <ColorPicker 
+            <ColorPicker
               currentColor={note.color || 'default'}
               onColorChange={handleColorChange}
               disabled={false}
             />
-            
+
             {/* More Options Menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
+                <Button
+                  variant="ghost"
+                  size="sm"
                   className="h-8 w-8 p-0 opacity-30 hover:opacity-100 transition-opacity border border-transparent hover:border-gray-200 rounded-sm"
                 >
                   <MoreVertical className="h-4 w-4" />
@@ -237,7 +237,7 @@ const NoteCard = ({
                   Share
                 </DropdownMenuItem>
                 {note.shared_with_current_user && (
-                  <DropdownMenuItem 
+                  <DropdownMenuItem
                     onClick={() => onHideSharedNote && onHideSharedNote(note, note.current_user_share_id)}
                     className="flex items-center"
                   >
@@ -258,7 +258,7 @@ const NoteCard = ({
                     </>
                   )}
                 </DropdownMenuItem>
-                <DropdownMenuItem 
+                <DropdownMenuItem
                   onClick={() => onDelete(note.id)}
                   className="text-destructive focus:text-destructive"
                 >
@@ -283,7 +283,7 @@ const NoteCard = ({
         ) : (
           note.labels && note.labels.length > 0 && (
             <div className="labels-container mt-3">
-              <LabelBadges 
+              <LabelBadges
                 labels={note.labels}
                 maxVisible={3}
                 onLabelClick={onLabelClick}

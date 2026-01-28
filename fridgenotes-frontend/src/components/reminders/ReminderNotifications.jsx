@@ -20,8 +20,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { Bell, Clock, CheckCircle, AlarmClock, X } from 'lucide-react';
-import { Button } from './ui/button';
-import { Card } from './ui/card';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+
 
 const ReminderNotifications = ({ notes = [], onMarkComplete, onSnooze, onDismiss }) => {
   const [activeReminders, setActiveReminders] = useState([]);
@@ -37,21 +38,21 @@ const ReminderNotifications = ({ notes = [], onMarkComplete, onSnooze, onDismiss
    */
   useEffect(() => {
     const now = new Date();
-    
+
     const reminders = notes.filter(note => {
       // Skip notes without reminders or completed reminders
       if (!note.reminder_datetime || note.reminder_completed) {
         return false;
       }
-      
+
       const reminderTime = new Date(note.reminder_datetime);
       const snoozeTime = note.reminder_snoozed_until ? new Date(note.reminder_snoozed_until) : null;
-      
+
       // If snoozed and snooze period hasn't expired, don't show
       if (snoozeTime && snoozeTime > now) {
         return false;
       }
-      
+
       // Show reminder if current time is past the reminder time
       return reminderTime <= now;
     });
@@ -72,7 +73,7 @@ const ReminderNotifications = ({ notes = [], onMarkComplete, onSnooze, onDismiss
     const diffMinutes = Math.floor(diffMs / (1000 * 60));
     const diffHours = Math.floor(diffMinutes / 60);
     const diffDays = Math.floor(diffHours / 24);
-    
+
     // Format based on time elapsed since reminder was due
     if (diffMinutes < 1) {
       return 'Just now';
@@ -110,7 +111,7 @@ const ReminderNotifications = ({ notes = [], onMarkComplete, onSnooze, onDismiss
         const reminderTime = new Date(note.reminder_datetime);
         const now = new Date();
         const diffMinutes = (now.getTime() - reminderTime.getTime()) / (1000 * 60);
-        
+
         if (diffMinutes <= 5) {
           new Notification(`Reminder: ${note.title || 'Untitled Note'}`, {
             body: note.content ? note.content.substring(0, 100) + '...' : 'Your reminder is ready',
@@ -156,7 +157,7 @@ const ReminderNotifications = ({ notes = [], onMarkComplete, onSnooze, onDismiss
               <X size={14} />
             </Button>
           </div>
-          
+
           <div className="flex gap-2 mt-3">
             <Button
               size="sm"
@@ -166,7 +167,7 @@ const ReminderNotifications = ({ notes = [], onMarkComplete, onSnooze, onDismiss
               <CheckCircle size={14} />
               Complete
             </Button>
-            
+
             <div className="flex gap-1">
               <Button
                 variant="outline"

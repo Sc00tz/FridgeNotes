@@ -2,9 +2,10 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Search, Plus, ArrowUp, ArrowDown, CornerDownLeft } from 'lucide-react';
-import apiClient from '../lib/api';
+import apiClient from '../../lib/api';
 
-const LabelAutocomplete = ({ 
+
+const LabelAutocomplete = ({
   onSelectLabel,
   excludeLabelIds = [],
   placeholder = "Search labels...",
@@ -18,7 +19,7 @@ const LabelAutocomplete = ({
   const [suggestions, setSuggestions] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const inputRef = useRef(null);
   const dropdownRef = useRef(null);
 
@@ -106,21 +107,21 @@ const LabelAutocomplete = ({
         setSearchTerm('');
         setSelectedIndex(-1);
         break;
-        
+
       case 'ArrowDown':
         e.preventDefault();
-        setSelectedIndex(prev => 
+        setSelectedIndex(prev =>
           prev < suggestions.length - 1 ? prev + 1 : 0
         );
         break;
-        
+
       case 'ArrowUp':
         e.preventDefault();
-        setSelectedIndex(prev => 
+        setSelectedIndex(prev =>
           prev > 0 ? prev - 1 : suggestions.length - 1
         );
         break;
-        
+
       case 'Enter':
         e.preventDefault();
         if (selectedIndex >= 0 && suggestions[selectedIndex]) {
@@ -135,11 +136,11 @@ const LabelAutocomplete = ({
   // Highlight matching text in suggestions
   const highlightMatch = (text, query) => {
     if (!query.trim()) return text;
-    
+
     const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
     const parts = text.split(regex);
-    
-    return parts.map((part, index) => 
+
+    return parts.map((part, index) =>
       regex.test(part) ? (
         <span key={index} className="bg-yellow-200 font-medium">
           {part}
@@ -211,18 +212,17 @@ const LabelAutocomplete = ({
                   <button
                     key={label.id}
                     onClick={() => handleSelect(label)}
-                    className={`w-full flex items-center gap-3 p-3 rounded text-left transition-colors ${
-                      index === selectedIndex 
-                        ? 'bg-blue-50 border border-blue-200' 
+                    className={`w-full flex items-center gap-3 p-3 rounded text-left transition-colors ${index === selectedIndex
+                        ? 'bg-blue-50 border border-blue-200'
                         : 'hover:bg-gray-50'
-                    }`}
+                      }`}
                   >
                     {/* Color indicator */}
                     <div
                       className="w-4 h-4 rounded-full border flex-shrink-0"
                       style={{ backgroundColor: label.color || '#3b82f6' }}
                     />
-                    
+
                     {/* Label info */}
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">

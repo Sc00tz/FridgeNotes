@@ -64,9 +64,9 @@ export const useAutocomplete = (currentUser) => {
   // Add or update an item in user's autocomplete data
   const addItem = useCallback((itemText) => {
     if (!itemText || !itemText.trim()) return;
-    
+
     const normalizedItem = itemText.trim();
-    
+
     setUserItems(prevItems => {
       // Find existing item
       const existingIndex = prevItems.findIndex(
@@ -104,17 +104,48 @@ export const useAutocomplete = (currentUser) => {
 
       // Save to localStorage
       saveUserItems(newItems);
-      
+
       return newItems;
     });
   }, [saveUserItems]);
 
   // Learn from existing notes to populate initial autocomplete data
+  /**
+   * Scans existing notes to learn common checklist items.
+   * 
+   * PERFORMANCE OPTIMIZATION: 
+   * This function implements incremental learning and throttling.
+   * - It only processes if 10 seconds have passed since the last scan.
+   * - It skips processing if the number of notes hasn't changed significantly.
+   * - This prevents the UI from freezing when notes are modified rapidly.
+   * 
+   * @param {Array} notes - The list of current user notes to learn from.
+   */
   const learnFromNotes = useCallback((notes) => {
-    if (!Array.isArray(notes)) return;
+    if (!notes || notes.length === 0) return;
+
+    // OPTIMIZATION: Incremental learning and throttling
+    // Only process if we haven't in the last 10 seconds or notes count changed significantly
+    const now = Date.now();
+    const lastLearningTime = learnFromNotes._lastTime || 0;
+    const lastNotesCount = learnFromNotes._lastCount || 0;
+
+    const timeSinceLastLearning = now - lastLearningTime;
+    const countDifference = Math.abs(notes.length - lastNotesCount);
+
+    // Throttle: Skip if less than 10s passed AND change is minor
+    if (timeSinceLastLearning < 10000 && countDifference < 5) {
+      return;
+    }
+
+    // Update markers for next run
+    learnFromNotes._lastTime = now;
+    learnFromNotes._lastCount = notes.length;
+
+    console.log('useAutocomplete: Learning from notes (throttled)...');
 
     const items = new Map();
-    
+
     notes.forEach(note => {
       if (note.note_type === 'checklist' && note.checklist_items) {
         note.checklist_items.forEach(item => {
@@ -137,7 +168,7 @@ export const useAutocomplete = (currentUser) => {
       );
 
       const mergedItems = [];
-      
+
       // Add/update items from notes
       items.forEach((count, text) => {
         const existing = existingMap.get(text);

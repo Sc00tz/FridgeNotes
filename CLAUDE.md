@@ -118,7 +118,8 @@ The frontend uses a **composite hook pattern** for clean separation of concerns:
 - **List Templates**: Built-in and custom templates with usage tracking
 - **Enhanced Offline**: Operation queuing with background sync
 - **Import/Export**: Full data backup/restore with JSON and CSV support
-- **Memory Optimization**: Fixed WebSocket and note management memory leaks
+- **Memory Optimization**: Fixed WebSocket room scaling, implemented grid virtualization, and optimized autocomplete learning loops.
+
 
 ### Core Features
 

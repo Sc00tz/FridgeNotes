@@ -11,20 +11,21 @@ import { LogIn, UserPlus } from 'lucide-react';
 
 // Components
 import AppHeader from './components/AppHeader';
-import NotesGrid from './components/NotesGrid';
-import CreateNoteDialog from './components/CreateNoteDialog';
-import ShareDialog from './components/ShareDialog';
-import LoginModal from './components/LoginModal';
-import RegisterModal from './components/RegisterModal';
-import UserProfileModal from './components/UserProfileModal';
-import AdminPanel from './components/AdminPanel';
-import LabelManagement from './components/LabelManagement';
-import PWAInstallPrompt from './components/PWAInstallPrompt';
-import ReminderNotifications from './components/ReminderNotifications';
-import ListTemplatesDialog from './components/ListTemplatesDialog';
-import OfflineSyncStatus from './components/OfflineSyncStatus';
-import ImportExportDialog from './components/ImportExportDialog';
-import RecipeToShoppingDialog from './components/RecipeToShoppingDialog';
+import NotesGrid from './components/notes/NotesGrid';
+import CreateNoteDialog from './components/notes/CreateNoteDialog';
+import ShareDialog from './components/notes/ShareDialog';
+import LoginModal from './components/auth/LoginModal';
+import RegisterModal from './components/auth/RegisterModal';
+import UserProfileModal from './components/auth/UserProfileModal';
+import AdminPanel from './components/admin/AdminPanel';
+import LabelManagement from './components/labels/LabelManagement';
+import PWAInstallPrompt from './components/pwa/PWAInstallPrompt';
+import ReminderNotifications from './components/reminders/ReminderNotifications';
+import ListTemplatesDialog from './components/shared/ListTemplatesDialog';
+import OfflineSyncStatus from './components/pwa/OfflineSyncStatus';
+import ImportExportDialog from './components/shared/ImportExportDialog';
+import RecipeToShoppingDialog from './components/notes/RecipeToShoppingDialog';
+
 
 // Custom hooks
 import { useAuth } from './hooks/useAuth';
@@ -48,16 +49,16 @@ function App() {
   const autocomplete = useAutocomplete(auth.currentUser);
   const templates = useTemplates(auth.currentUser);
   const importExport = useImportExport(
-    auth.currentUser, 
-    noteLabels.notes, 
-    noteLabels.labels, 
-    noteLabels.createNote, 
+    auth.currentUser,
+    noteLabels.notes,
+    noteLabels.labels,
+    noteLabels.createNote,
     noteLabels.createLabel
   );
 
   // UI state only
   const [modals, setModals] = useState({
-    login: false, register: false, profile: false, admin: false, 
+    login: false, register: false, profile: false, admin: false,
     labels: false, createNote: false, templates: false, importExport: false, recipe: false
   });
 
@@ -67,7 +68,7 @@ function App() {
   });
 
   useEffect(() => { auth.checkAuthStatus(); }, []);
-  
+
   // Learn from existing notes when they're loaded
   useEffect(() => {
     if (noteLabels.notes.length > 0) {
@@ -81,10 +82,10 @@ function App() {
   // Auth handlers
   const handleLogin = async (data) => { await auth.login(data); closeModal('login'); };
   const handleRegister = async (data) => { await auth.register(data); closeModal('register'); };
-  const handleLogout = async () => { 
-    await auth.logout(); 
-    noteLabels.setNotes([]); 
-    noteLabels.clearLabels(); 
+  const handleLogout = async () => {
+    await auth.logout();
+    noteLabels.setNotes([]);
+    noteLabels.clearLabels();
   };
 
   // Note handlers
@@ -114,7 +115,7 @@ function App() {
   };
 
   // Label handlers - now simplified since logic is in useNoteLabels
-  const handleLabelClick = useCallback((label) => 
+  const handleLabelClick = useCallback((label) =>
     setForm(prev => ({ ...prev, searchTerm: `label:${label.display_name}` })), []);
 
   const handleLabelAdd = async (noteId, labelId) => {
@@ -167,12 +168,12 @@ function App() {
       };
       const newNote = await noteLabels.createNote(noteData);
       setForm(prev => ({ ...prev, editingNoteId: newNote.id }));
-      
+
       // Update template usage statistics
       if (templateData.templateId) {
         await templates.useTemplate(templateData.templateId);
       }
-      
+
       closeModal('templates');
     } catch (error) {
       console.error('Failed to create note from template:', error);
@@ -321,8 +322,8 @@ function App() {
         onDeleteLabel={noteLabels.deleteLabel}
         loading={noteLabels.loading} />
 
-      <ListTemplatesDialog 
-        isOpen={modals.templates} 
+      <ListTemplatesDialog
+        isOpen={modals.templates}
         onClose={() => closeModal('templates')}
         onCreateNoteFromTemplate={handleCreateNoteFromTemplate}
         onSaveAsTemplate={handleSaveAsTemplate}

@@ -14,14 +14,15 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Badge } from './ui/badge';
-import { Separator } from './ui/separator';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import { Plus, Trash2, Edit, Check, X, GripVertical, ShoppingCart } from 'lucide-react';
-import ChecklistItemAutocomplete from './ChecklistItemAutocomplete';
+import ChecklistItemAutocomplete from '../notes/ChecklistItemAutocomplete';
+
 
 // Store sections with logical shopping order
 const STORE_CATEGORIES = [
@@ -55,7 +56,7 @@ const CategoryManager = ({
   // Group items by category
   const categorizedItems = useMemo(() => {
     const grouped = {};
-    
+
     // Initialize all categories
     STORE_CATEGORIES.forEach(cat => {
       grouped[cat.id] = [];
@@ -105,7 +106,7 @@ const CategoryManager = ({
 
   const handleSaveEdit = () => {
     if (editingItem && editingText.trim()) {
-      onUpdateItem(editingItem, { 
+      onUpdateItem(editingItem, {
         text: editingText.trim(),
         category: editingCategory
       });
@@ -168,8 +169,8 @@ const CategoryManager = ({
             </div>
           </div>
           <div className="w-full bg-secondary rounded-full h-2 mt-2">
-            <div 
-              className="bg-primary h-2 rounded-full transition-all duration-300" 
+            <div
+              className="bg-primary h-2 rounded-full transition-all duration-300"
               style={{ width: `${overallProgress}%` }}
             />
           </div>
@@ -206,23 +207,22 @@ const CategoryManager = ({
                 </div>
                 {stats.total > 0 && (
                   <div className="w-full bg-secondary rounded-full h-1.5 mt-2">
-                    <div 
-                      className="bg-current h-1.5 rounded-full transition-all duration-300" 
+                    <div
+                      className="bg-current h-1.5 rounded-full transition-all duration-300"
                       style={{ width: `${stats.percentage}%` }}
                     />
                   </div>
                 )}
               </CardHeader>
-              
+
               <CardContent className="pt-0">
                 {/* Items List */}
                 <div className="space-y-2 mb-4">
                   {visibleItems.map((item) => (
-                    <div 
+                    <div
                       key={item.id}
-                      className={`flex items-center gap-3 p-2 rounded-lg border transition-colors ${
-                        item.completed ? 'opacity-60 bg-muted/50' : 'bg-background hover:bg-muted/50'
-                      }`}
+                      className={`flex items-center gap-3 p-2 rounded-lg border transition-colors ${item.completed ? 'opacity-60 bg-muted/50' : 'bg-background hover:bg-muted/50'
+                        }`}
                     >
                       {/* Drag Handle */}
                       <div className="cursor-grab text-muted-foreground hover:text-foreground">
@@ -269,7 +269,7 @@ const CategoryManager = ({
                             </div>
                           </div>
                         ) : (
-                          <div 
+                          <div
                             className={`text-sm ${item.completed ? 'line-through text-muted-foreground' : ''}`}
                           >
                             {item.text}
@@ -343,7 +343,7 @@ const CategoryManager = ({
                   variant="ghost"
                   onClick={() => {
                     // Show all categories that don't have items yet
-                    const emptyCategory = STORE_CATEGORIES.find(cat => 
+                    const emptyCategory = STORE_CATEGORIES.find(cat =>
                       !activeCategories.find(active => active.id === cat.id)
                     );
                     if (emptyCategory) {

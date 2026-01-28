@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, X, Bell, BellOff } from 'lucide-react';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+
 
 const ReminderPicker = ({ reminder, onReminderChange, className = '' }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -48,20 +49,20 @@ const ReminderPicker = ({ reminder, onReminderChange, className = '' }) => {
 
   const formatReminderDisplay = () => {
     if (!reminder) return null;
-    
+
     const reminderDate = new Date(reminder);
     const now = new Date();
-    
+
     // Compare just the dates (ignore time) to determine if it's today, tomorrow, etc.
     const reminderDateOnly = new Date(reminderDate.getFullYear(), reminderDate.getMonth(), reminderDate.getDate());
     const nowDateOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const diffDays = Math.round((reminderDateOnly.getTime() - nowDateOnly.getTime()) / (1000 * 60 * 60 * 24));
-    
-    const timeStr = reminderDate.toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
+
+    const timeStr = reminderDate.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit'
     });
-    
+
     if (diffDays === 0) {
       return `Today at ${timeStr}`;
     } else if (diffDays === 1) {
@@ -84,9 +85,8 @@ const ReminderPicker = ({ reminder, onReminderChange, className = '' }) => {
     <div className={`relative ${className}`}>
       {/* Display current reminder or add button */}
       {reminder ? (
-        <div className={`flex items-center gap-2 p-2 rounded-md border ${
-          isOverdue() ? 'border-red-200 bg-red-50 text-red-700' : 'border-blue-200 bg-blue-50 text-blue-700'
-        }`}>
+        <div className={`flex items-center gap-2 p-2 rounded-md border ${isOverdue() ? 'border-red-200 bg-red-50 text-red-700' : 'border-blue-200 bg-blue-50 text-blue-700'
+          }`}>
           <Bell size={16} />
           <span className="text-sm font-medium">
             {formatReminderDisplay()}
@@ -118,7 +118,7 @@ const ReminderPicker = ({ reminder, onReminderChange, className = '' }) => {
         <div className="absolute top-full left-0 z-50 mt-2 p-4 bg-white border rounded-lg shadow-lg min-w-[280px]">
           <div className="space-y-4">
             <h3 className="font-medium text-gray-900">Set Reminder</h3>
-            
+
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -134,7 +134,7 @@ const ReminderPicker = ({ reminder, onReminderChange, className = '' }) => {
                   />
                 </div>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Time

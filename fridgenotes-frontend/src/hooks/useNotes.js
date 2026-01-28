@@ -42,8 +42,8 @@ export const useNotes = (currentUser, isAuthenticated) => {
         return [data.data, ...prevNotes];
       });
     } else {
-      setNotes(prevNotes => 
-        prevNotes.map(note => 
+      setNotes(prevNotes =>
+        prevNotes.map(note =>
           note.id === data.note_id ? { ...note, ...data.data } : note
         )
       );
@@ -51,7 +51,7 @@ export const useNotes = (currentUser, isAuthenticated) => {
   }, []);
 
   const handleChecklistToggle = useCallback((data) => {
-    setNotes(prevNotes => 
+    setNotes(prevNotes =>
       prevNotes.map(note => {
         if (note.id === data.note_id) {
           const updatedItems = note.checklist_items.map(item =>
@@ -69,7 +69,7 @@ export const useNotes = (currentUser, isAuthenticated) => {
     if (!data || !data.user_id || !data.note_ids || !Array.isArray(data.note_ids)) {
       return;
     }
-    
+
     // Only update if this is for the current user
     if (data.user_id === currentUser?.id) {
       setNotes(prevNotes => {
@@ -77,22 +77,22 @@ export const useNotes = (currentUser, isAuthenticated) => {
         if (!prevNotes || !Array.isArray(prevNotes)) {
           return prevNotes;
         }
-        
+
         try {
           // Create a map for quick lookup
           const noteMap = new Map(prevNotes.map(note => [note.id, note]));
-          
+
           // Reorder according to the received order
           const reorderedNotes = data.note_ids
             .map(id => noteMap.get(id))
             .filter(Boolean); // Remove any undefined notes
-          
+
           // Add any notes that weren't in the reorder list (shouldn't happen but safety)
           const reorderedIds = new Set(data.note_ids);
           const remainingNotes = prevNotes.filter(note => !reorderedIds.has(note.id));
-          
+
           const finalNotes = [...reorderedNotes, ...remainingNotes];
-          
+
           return finalNotes;
         } catch (error) {
           return prevNotes; // Return original notes on error
@@ -110,15 +110,13 @@ export const useNotes = (currentUser, isAuthenticated) => {
       const userNotes = await apiClient.getNotes();
       setNotes(userNotes);
 
-      // Join WebSocket rooms for real-time updates
-      if (socketClient.isConnected) {
-        userNotes.forEach(note => {
-          socketClient.joinNote(note.id);
-          joinedRoomsRef.current.add(note.id);
-        });
-      }
+      setNotes(userNotes);
+
+      // OPTIMIZATION: Individual room joining removed in favor of user rooms
+      // Individual rooms only joined on demand for presence if needed
 
       return userNotes;
+
     } catch (error) {
       showError('Failed to load notes: ' + error.message);
       throw error;
@@ -135,10 +133,10 @@ export const useNotes = (currentUser, isAuthenticated) => {
 
     let mounted = true;
     let connectionTimeout = null;
-    
+
     const setupWebSocket = async () => {
       if (!mounted) return;
-      
+
       socketClient.connect(currentUser.id);
 
       // Set up event listeners
@@ -148,31 +146,14 @@ export const useNotes = (currentUser, isAuthenticated) => {
 
       try {
         const userNotes = await loadNotes();
-        
+
         if (!mounted) return; // Check if still mounted after async operation
-        
-        // OPTIMIZATION: Debounced room joining to reduce WebSocket overhead
-        const joinRoomsDebounced = () => {
-          if (!mounted || !socketClient.isConnected || !userNotes) return;
-          
-          userNotes.forEach(note => {
-            socketClient.joinNote(note.id);
-            joinedRoomsRef.current.add(note.id);
-          });
-        };
-        
-        // Wait for connection with timeout
-        if (socketClient.isConnected) {
-          joinRoomsDebounced();
-        } else {
-          connectionTimeout = setTimeout(() => {
-            if (mounted && socketClient.isConnected) {
-              joinRoomsDebounced();
-            }
-          }, 1000); // Single timeout instead of polling
-        }
-        
+
+        // OPTIMIZATION: user room joining is handled by socketClient.connect()
+        // No need to manually join rooms for all notes on startup
+
       } catch (error) {
+
         if (mounted) {
           showError('Failed to setup real-time connection');
         }
@@ -184,12 +165,12 @@ export const useNotes = (currentUser, isAuthenticated) => {
     // OPTIMIZED: Cleanup function with better resource management
     return () => {
       mounted = false;
-      
+
       // Clear timeout
       if (connectionTimeout) {
         clearTimeout(connectionTimeout);
       }
-      
+
       // Leave all rooms efficiently
       const roomsToLeave = Array.from(joinedRoomsRef.current);
       roomsToLeave.forEach(noteId => {
@@ -201,7 +182,7 @@ export const useNotes = (currentUser, isAuthenticated) => {
       socketClient.offNoteUpdate(handleNoteUpdate);
       socketClient.offChecklistItemToggle(handleChecklistToggle);
       socketClient.offNotesReordered(handleNotesReordered);
-      
+
       socketClient.disconnect();
     };
   }, [isAuthenticated, currentUser]); // OPTIMIZED: Removed function dependencies to prevent excessive re-runs
@@ -210,21 +191,19 @@ export const useNotes = (currentUser, isAuthenticated) => {
   const createNote = useCallback(async (noteData) => {
     try {
       setLoading(true);
-      
+
       // Try with offline sync support
       const result = await offlineSync.executeWithOfflineSupport({
         type: 'create_note',
         data: noteData
       });
-      
+
       if (result.success) {
         const newNote = result.result;
         setNotes(prevNotes => [newNote, ...prevNotes]);
-        if (socketClient.isConnected) {
-          socketClient.joinNote(newNote.id);
-          joinedRoomsRef.current.add(newNote.id);
-        }
+        // WebSocket update handled via user room broadcast in backend
         return newNote;
+
       } else if (result.queued) {
         // Operation queued for offline - create optimistic update
         const optimisticNote = {
@@ -254,7 +233,7 @@ export const useNotes = (currentUser, isAuthenticated) => {
       // Handle both calling patterns:
       // updateNote(noteId, updatedNote) or updateNote(updatedNote)
       let noteId, noteData;
-      
+
       if (typeof noteIdOrNote === 'object' && noteIdOrNote.id) {
         // Called with just the note object: updateNote(updatedNote)
         noteId = noteIdOrNote.id;
@@ -264,9 +243,9 @@ export const useNotes = (currentUser, isAuthenticated) => {
         noteId = noteIdOrNote;
         noteData = updatedNote;
       }
-      
+
       const savedNote = await apiClient.updateNote(noteId, noteData);
-      setNotes(prevNotes => 
+      setNotes(prevNotes =>
         prevNotes.map(note => note.id === savedNote.id ? savedNote : note)
       );
 
@@ -286,7 +265,7 @@ export const useNotes = (currentUser, isAuthenticated) => {
     try {
       await apiClient.deleteNote(noteId);
       setNotes(prevNotes => prevNotes.filter(note => note.id !== noteId));
-      
+
       // Leave WebSocket room
       if (socketClient.isConnected) {
         socketClient.leaveNote(noteId);
@@ -303,9 +282,9 @@ export const useNotes = (currentUser, isAuthenticated) => {
   const updateChecklistItem = useCallback(async (noteId, itemId, itemData) => {
     try {
       await apiClient.updateChecklistItem(noteId, itemId, itemData);
-      
+
       // Update local state
-      setNotes(prevNotes => 
+      setNotes(prevNotes =>
         prevNotes.map(note => {
           if (note.id === noteId) {
             const updatedItems = note.checklist_items.map(item =>
@@ -332,12 +311,12 @@ export const useNotes = (currentUser, isAuthenticated) => {
     try {
       // Call API to persist the new order (no optimistic update)
       await apiClient.reorderNotes(noteIds);
-      
+
       // Reload notes from server to get the correct order
       await loadNotes();
-      
+
       showSuccess('Notes reordered');
-      
+
     } catch (error) {
       showError('Failed to reorder notes: ' + error.message);
       throw error;
@@ -352,31 +331,31 @@ export const useNotes = (currentUser, isAuthenticated) => {
 
     try {
       setLoading(true);
-      
+
       // Optimistically update UI first
-      setNotes(prevNotes => 
-        prevNotes.map(note => 
+      setNotes(prevNotes =>
+        prevNotes.map(note =>
           note.id === noteId ? { ...note, pinned } : note
         )
       );
-      
+
       // Call API to update backend
       const response = await apiClient.pinNote(noteId, pinned);
-      
+
       if (response) {
         showSuccess(response.message || (pinned ? 'Note pinned' : 'Note unpinned'));
       }
-      
+
     } catch (error) {
       showError('Failed to update pin status: ' + error.message);
-      
+
       // Revert optimistic update on error
-      setNotes(prevNotes => 
-        prevNotes.map(note => 
+      setNotes(prevNotes =>
+        prevNotes.map(note =>
           note.id === noteId ? { ...note, pinned: !pinned } : note
         )
       );
-      
+
       throw error;
     } finally {
       setLoading(false);

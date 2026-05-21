@@ -143,12 +143,15 @@ export const getThemeAwareColorConfig = (colorValue, isDark = false) => {
     };
   }
   
-  // Dark mode - use dark variants if available, otherwise darken light colors
+  // Dark mode - use dark variants if available.
+  // Only use a light text color when there is an explicit dark background variant;
+  // colors without a dark background stay bright, so they need dark text regardless.
+  const hasDarkBackground = !!colorConfig.backgroundDark;
   return {
     background: colorConfig.backgroundDark || colorConfig.background,
     backgroundHover: colorConfig.backgroundHoverDark || colorConfig.backgroundHover,
     border: colorConfig.borderDark || colorConfig.border,
-    text: colorConfig.textDark || '#f9fafb',
+    text: hasDarkBackground ? (colorConfig.textDark || '#f9fafb') : colorConfig.text,
     icon: colorConfig.iconDark || colorConfig.icon
   };
 };

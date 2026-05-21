@@ -309,18 +309,17 @@ const NoteCard = ({
               className="min-h-[100px] border-none p-0 resize-none focus-visible:ring-0"
             />
           ) : (
-            <div className="whitespace-pre-wrap-break text-sm leading-relaxed text-container-safe">
+            <div className="whitespace-pre-wrap-break text-sm leading-relaxed text-container-safe" style={{ color: colorConfig.text }}>
               {note.content || (
-                <span className="text-muted-foreground italic">Empty note</span>
+                <span className="italic" style={{ color: colorConfig.text, opacity: 0.5 }}>Empty note</span>
               )}
             </div>
           )
         ) : (
           /* Checklist Note */
           <div className="space-y-3">
-            {/* Progress indicator for checklist */}
             {totalCount > 0 && (
-              <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <div className="flex items-center justify-between text-sm" style={{ color: colorConfig.text, opacity: 0.75 }}>
                 <span>{completedCount} of {totalCount} completed</span>
                 {totalCount > 1 && (
                   <Button
@@ -328,6 +327,7 @@ const NoteCard = ({
                     size="sm"
                     onClick={() => setShowCompleted(!showCompleted)}
                     className="h-6 px-2 text-xs"
+                    style={{ color: colorConfig.text }}
                   >
                     {showCompleted ? (
                       <>
@@ -345,7 +345,6 @@ const NoteCard = ({
               </div>
             )}
 
-            {/* Active checklist items */}
             <div className="space-y-2">
               {activeItems.map((item) => (
                 <div key={item.id} className="flex items-center space-x-2 group">
@@ -353,6 +352,7 @@ const NoteCard = ({
                     checked={item.completed}
                     onCheckedChange={(checked) => handleChecklistItemToggle(item.id, checked)}
                     className="mt-0.5"
+                    style={{ borderColor: colorConfig.text }}
                   />
                   {isEditing ? (
                     <div className="flex-1 flex items-center space-x-2">
@@ -360,18 +360,20 @@ const NoteCard = ({
                         value={item.text}
                         onChange={(e) => handleChecklistItemTextChange(item.id, e.target.value)}
                         className="text-sm border-none p-0 h-auto focus-visible:ring-0"
+                        style={{ color: colorConfig.text }}
                       />
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleRemoveChecklistItem(item.id)}
                         className="h-6 w-6 p-0 opacity-40 hover:opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100"
+                        style={{ color: colorConfig.text }}
                       >
                         <X className="h-3 w-3" />
                       </Button>
                     </div>
                   ) : (
-                    <span className="text-sm flex-1 text-container-safe break-words-anywhere">
+                    <span className="text-sm flex-1 text-container-safe break-words-anywhere" style={{ color: colorConfig.text }}>
                       {item.text}
                     </span>
                   )}
@@ -379,54 +381,51 @@ const NoteCard = ({
               ))}
             </div>
 
-            {/* Completed items section */}
             {completedItems.length > 0 && (
-              <div className="pt-3 border-t border-muted">
-                {/* Completed items toggle */}
+              <div className="pt-3" style={{ borderTop: `1px solid ${colorConfig.border}` }}>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowCompleted(!showCompleted)}
-                  className="w-full justify-between text-muted-foreground hover:text-foreground h-8 px-0 mb-2"
+                  className="w-full justify-between h-8 px-0 mb-2"
+                  style={{ color: colorConfig.text, opacity: 0.75 }}
                 >
                   <span className="text-xs">
                     {completedItems.length} completed item{completedItems.length !== 1 ? 's' : ''}
                   </span>
-                  {showCompleted ? (
-                    <ChevronUp className="h-3 w-3" />
-                  ) : (
-                    <ChevronDown className="h-3 w-3" />
-                  )}
+                  {showCompleted ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                 </Button>
 
-                {/* Completed items list (collapsible) */}
                 {showCompleted && (
                   <div className="space-y-2">
                     {completedItems.map((item) => (
-                      <div key={item.id} className="flex items-center space-x-2 group opacity-75">
+                      <div key={item.id} className="flex items-center space-x-2 group opacity-60">
                         <Checkbox
                           checked={item.completed}
                           onCheckedChange={(checked) => handleChecklistItemToggle(item.id, checked)}
                           className="mt-0.5"
+                          style={{ borderColor: colorConfig.text }}
                         />
                         {isEditing ? (
                           <div className="flex-1 flex items-center space-x-2">
                             <Input
                               value={item.text}
                               onChange={(e) => handleChecklistItemTextChange(item.id, e.target.value)}
-                              className="text-sm border-none p-0 h-auto focus-visible:ring-0 line-through text-muted-foreground"
+                              className="text-sm border-none p-0 h-auto focus-visible:ring-0 line-through"
+                              style={{ color: colorConfig.text }}
                             />
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleRemoveChecklistItem(item.id)}
                               className="h-6 w-6 p-0 opacity-40 hover:opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100"
+                              style={{ color: colorConfig.text }}
                             >
                               <X className="h-3 w-3" />
                             </Button>
                           </div>
                         ) : (
-                          <span className="text-sm flex-1 line-through text-muted-foreground text-container-safe break-words-anywhere">
+                          <span className="text-sm flex-1 line-through text-container-safe break-words-anywhere" style={{ color: colorConfig.text }}>
                             {item.text}
                           </span>
                         )}
@@ -437,10 +436,9 @@ const NoteCard = ({
               </div>
             )}
 
-            {/* Add new item (only when editing) */}
             {isEditing && (
               <div className="flex items-center space-x-2 pt-2">
-                <Plus className="h-4 w-4 text-muted-foreground mt-0.5" />
+                <Plus className="h-4 w-4 mt-0.5" style={{ color: colorConfig.text, opacity: 0.6 }} />
                 <ChecklistItemAutocomplete
                   value={newChecklistItem}
                   onChange={setNewChecklistItem}
@@ -484,12 +482,15 @@ const NoteCard = ({
         )}
 
         {/* Note metadata */}
-        <div className="flex items-center justify-between mt-4 pt-4 border-t note-metadata">
-          <span>
+        <div
+          className="flex items-center justify-between mt-4 pt-4 note-metadata"
+          style={{ borderTop: `1px solid ${colorConfig.border}`, color: colorConfig.text, opacity: 0.65 }}
+        >
+          <span className="text-xs">
             {note.updated_at ? new Date(note.updated_at).toLocaleDateString() : 'No date'}
           </span>
           {note.pinned && (
-            <Badge variant="outline" className="text-xs">
+            <Badge variant="outline" className="text-xs" style={{ borderColor: colorConfig.border, color: colorConfig.text }}>
               Pinned
             </Badge>
           )}

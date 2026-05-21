@@ -53,14 +53,27 @@
   transform: scale(0.95);
 }
 
-/* Note metadata styling to work with all colors */
-.note-metadata {
-  color: rgba(32, 33, 36, 0.7) !important;
+/* Force all text inside a colored note card to use the note's own text color,
+   overriding Tailwind/Radix CSS variables that don't know about note backgrounds. */
+.note-card,
+.note-card *:not(svg):not(path) {
+  color: var(--note-text) !important;
 }
 
-/* Dark mode metadata colors */
-.dark .note-metadata {
-  color: rgba(249, 250, 251, 0.7) !important;
+/* Restore specific overrides that should stay transparent/invisible */
+.note-card input,
+.note-card textarea {
+  background-color: transparent !important;
+}
+
+/* Checkboxes: border should match text color */
+.note-card [role="checkbox"] {
+  border-color: var(--note-text) !important;
+}
+
+/* Note metadata */
+.note-metadata {
+  color: var(--note-text) !important;
 }
 
 /* Label badge improvements */

@@ -176,7 +176,8 @@ const NoteCard = ({
         backgroundColor: colorConfig.background,
         borderColor: colorConfig.border,
         color: colorConfig.text,
-        '--note-bg-hover': colorConfig.backgroundHover
+        '--note-bg-hover': colorConfig.backgroundHover,
+        '--note-text': colorConfig.text,
       }}
     >
       <CardHeader className="pb-3">

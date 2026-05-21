@@ -69,22 +69,52 @@ A self-hosted, collaborative note-taking app built as a Progressive Web App. Fri
 
 ### Docker (Recommended)
 
-The simplest way to run FridgeNotes in production.
+The simplest way to run FridgeNotes. The image is built automatically from the `main` branch and published to the GitHub Container Registry.
 
 **Prerequisites:** Docker and Docker Compose
 
-```bash
-# Clone the repository
-git clone <repo-url>
-cd FridgeNotes
+**1. Create a directory and a `.env` file:**
 
-# Start the application
-docker-compose up -d
+```bash
+mkdir fridgenotes && cd fridgenotes
 ```
 
-The app will be available at **http://localhost:5009**.
+Create `.env`:
 
-**Getting the admin password:**
+```env
+SECRET_KEY=<generate with: python3 -c "import secrets; print(secrets.token_hex(32))">
+FLASK_ENV=production
+
+# Set this to the URL your browser uses to reach the app.
+# Used to restrict CORS and WebSocket connections to your own origin.
+# Local network example:  http://192.168.1.100:5009
+# Domain example:         https://notes.yourdomain.com
+ALLOWED_ORIGIN=http://YOUR_IP_OR_DOMAIN:5009
+```
+
+**2. Create `docker-compose.local.yml`:**
+
+```yaml
+services:
+  fridgenotes:
+    image: ghcr.io/sc00tz/fridgenotes:latest
+    ports:
+      - "5009:5009"
+    volumes:
+      - ./data:/app/src/database
+    env_file:
+      - .env
+    restart: unless-stopped
+```
+
+**3. Pull and start:**
+
+```bash
+docker-compose -f docker-compose.local.yml pull
+docker-compose -f docker-compose.local.yml up -d
+```
+
+**4. Get the admin password:**
 
 On first startup, FridgeNotes creates an admin user with a randomly generated password and prints it to the logs:
 
@@ -95,22 +125,113 @@ Password: Abc123XyZ9
 IMPORTANT: Save this password! It will not be shown again.
 ```
 
-Retrieve it at any time with:
-
 ```bash
-docker-compose logs fridgenotes | grep "Password:"
+docker-compose -f docker-compose.local.yml logs fridgenotes | grep "Password:"
 ```
 
 **Changing the exposed port:**
 
-Edit `docker-compose.yml` and change the left side of the ports mapping:
+Edit the `ports` mapping in your compose file:
 
 ```yaml
 ports:
-  - "8080:5009"   # now accessible at http://localhost:8080
+  - "8080:5009"   # app now accessible at http://YOUR_IP:8080
 ```
 
-> **Security note:** The `docker-compose.yml` ships with a hardcoded `SECRET_KEY`. You must replace it with a securely generated random value before running in any internet-accessible environment. See [Configuration](#configuration).
+Also update `ALLOWED_ORIGIN` in `.env` to match.
+
+---
+
+### Behind a Reverse Proxy (Nginx / Caddy)
+
+To expose FridgeNotes on a domain name or over HTTPS, place a reverse proxy in front of it. FridgeNotes uses WebSockets (Socket.IO), so the proxy must be configured to pass WebSocket upgrade headers.
+
+#### Nginx
+
+```nginx
+server {
+    listen 80;
+    server_name notes.yourdomain.com;
+
+    # Redirect HTTP to HTTPS
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name notes.yourdomain.com;
+
+    ssl_certificate     /etc/letsencrypt/live/notes.yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/notes.yourdomain.com/privkey.pem;
+
+    location / {
+        proxy_pass         http://127.0.0.1:5009;
+        proxy_http_version 1.1;
+
+        # Required for WebSocket (Socket.IO) support
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_read_timeout 86400;   # keep WebSocket connections alive
+    }
+}
+```
+
+Set `ALLOWED_ORIGIN=https://notes.yourdomain.com` in `.env`.
+
+#### Caddy
+
+```caddyfile
+notes.yourdomain.com {
+    reverse_proxy localhost:5009 {
+        header_up Upgrade {http.upgrade}
+        header_up Connection {http.connection}
+    }
+}
+```
+
+Caddy handles HTTPS and certificate renewal automatically. Set `ALLOWED_ORIGIN=https://notes.yourdomain.com` in `.env`.
+
+#### Docker Compose with proxy in the same stack
+
+If you run Nginx or Caddy in Docker alongside FridgeNotes, connect them on a shared network and use the service name as the upstream:
+
+```yaml
+services:
+  fridgenotes:
+    image: ghcr.io/sc00tz/fridgenotes:latest
+    expose:
+      - "5009"          # internal only — not published to host
+    volumes:
+      - ./data:/app/src/database
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - proxy
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/etc/letsencrypt:ro
+    restart: unless-stopped
+    networks:
+      - proxy
+
+networks:
+  proxy:
+```
+
+Use `proxy_pass http://fridgenotes:5009;` in your Nginx config.
 
 ---
 
@@ -121,44 +242,38 @@ ports:
 **Backend:**
 
 ```bash
-# Install Python dependencies
 pip install -r requirements.txt
-
-# Start the backend (runs on http://localhost:5009)
-python src/main.py
+python src/main.py          # runs on http://localhost:5009
 ```
 
 **Frontend:**
 
 ```bash
-# In a separate terminal
 cd fridgenotes-frontend
-
-# Install dependencies
 npm install
-
-# Start the development server (runs on http://localhost:5173)
-npm run dev
+npm run dev                 # runs on http://localhost:5173
 ```
 
-The Vite dev server proxies all `/api` and WebSocket requests to the backend on port 5009. Both processes must be running simultaneously for full functionality.
+The Vite dev server proxies all `/api` and WebSocket requests to the Flask backend on port 5009. Both processes must be running simultaneously.
+
+For local development, leave `SECRET_KEY` unset (a dev fallback is used automatically) and `ALLOWED_ORIGIN` can be omitted — CORS is unrestricted when not set.
 
 ---
 
 ## First-Time Setup
 
-1. Start the application (Docker or local).
-2. Find the admin password in the startup logs (see above).
+1. Start the application.
+2. Retrieve the admin password from the startup logs (see above).
 3. Open the app and sign in as `admin`.
 4. Change your password via the user profile menu.
-5. Create accounts for other household members through the Admin Panel (profile menu → Admin Panel → Users → Create User).
+5. Create accounts for other household members: profile menu → **Admin Panel** → **Users** → **Create User**.
 
-**If you lose the admin password** and the logs have rotated, you can reset by wiping the database. This deletes all data:
+**If you lose the admin password** and the logs have rotated, reset by removing the database volume. This deletes all data:
 
 ```bash
-docker-compose down
-docker volume rm fridgenotes_data
-docker-compose up -d   # new admin password printed to logs
+docker-compose -f docker-compose.local.yml down
+rm -rf ./data
+docker-compose -f docker-compose.local.yml up -d   # new password printed to logs
 ```
 
 ---
@@ -253,7 +368,7 @@ FridgeNotes/
 │       ├── App.jsx               # Main orchestrator component
 │       ├── components/           # UI components
 │       └── hooks/                # Business logic hooks
-├── docker-compose.yml
+├── docker-compose.local.yml
 ├── requirements.txt
 └── Dockerfile
 ```
@@ -342,17 +457,28 @@ FridgeNotes uses Socket.IO for real-time collaboration. Clients join a user-spec
 
 ## Configuration
 
-| Variable | Default | Description |
+All configuration is done via environment variables, typically in a `.env` file loaded by Docker Compose.
+
+| Variable | Required | Description |
 |---|---|---|
-| `SECRET_KEY` | (hardcoded in `docker-compose.yml`) | Flask session signing key. **Must be changed** for any internet-facing deployment. Generate one with `python -c "import secrets; print(secrets.token_hex(32))"`. |
-| `FLASK_ENV` | `production` | Set to `development` for debug mode and auto-reload. |
+| `SECRET_KEY` | **Yes (production)** | Flask session signing key. The app will refuse to start in production if this is not set. Generate with: `python3 -c "import secrets; print(secrets.token_hex(32))"` |
+| `FLASK_ENV` | No | Set to `production` (default) or `development`. Development mode enables auto-reload and skips the `SECRET_KEY` requirement. |
+| `ALLOWED_ORIGIN` | **Yes (production)** | The URL your browser uses to reach the app (e.g. `https://notes.yourdomain.com` or `http://192.168.1.100:5009`). Restricts CORS and WebSocket connections to your origin only. If unset, CORS is unrestricted (safe for local development only). |
 
-To set these, edit the `environment` block in `docker-compose.yml`:
+Example `.env` for a LAN deployment:
 
-```yaml
-environment:
-  - SECRET_KEY=your-securely-generated-random-value-here
-  - FLASK_ENV=production
+```env
+SECRET_KEY=b73c7855306aaf80ea576eada4232ecf05c343c445b9011832f92bc4005a8468
+FLASK_ENV=production
+ALLOWED_ORIGIN=http://192.168.1.100:5009
+```
+
+Example `.env` behind a reverse proxy with a domain:
+
+```env
+SECRET_KEY=b73c7855306aaf80ea576eada4232ecf05c343c445b9011832f92bc4005a8468
+FLASK_ENV=production
+ALLOWED_ORIGIN=https://notes.yourdomain.com
 ```
 
 ---

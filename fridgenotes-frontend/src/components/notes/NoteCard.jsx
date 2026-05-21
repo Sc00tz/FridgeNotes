@@ -311,7 +311,7 @@ const NoteCard = ({
           ) : (
             <div className="whitespace-pre-wrap-break text-sm leading-relaxed text-container-safe" style={{ color: colorConfig.text }}>
               {note.content || (
-                <span className="italic" style={{ color: colorConfig.text, opacity: 0.5 }}>Empty note</span>
+                <span className="italic" style={{ color: colorConfig.text }}>Empty note</span>
               )}
             </div>
           )
@@ -319,7 +319,7 @@ const NoteCard = ({
           /* Checklist Note */
           <div className="space-y-3">
             {totalCount > 0 && (
-              <div className="flex items-center justify-between text-sm" style={{ color: colorConfig.text, opacity: 0.75 }}>
+              <div className="flex items-center justify-between text-sm" style={{ color: colorConfig.text }}>
                 <span>{completedCount} of {totalCount} completed</span>
                 {totalCount > 1 && (
                   <Button
@@ -388,7 +388,7 @@ const NoteCard = ({
                   size="sm"
                   onClick={() => setShowCompleted(!showCompleted)}
                   className="w-full justify-between h-8 px-0 mb-2"
-                  style={{ color: colorConfig.text, opacity: 0.75 }}
+                  style={{ color: colorConfig.text }}
                 >
                   <span className="text-xs">
                     {completedItems.length} completed item{completedItems.length !== 1 ? 's' : ''}
@@ -399,7 +399,7 @@ const NoteCard = ({
                 {showCompleted && (
                   <div className="space-y-2">
                     {completedItems.map((item) => (
-                      <div key={item.id} className="flex items-center space-x-2 group opacity-60">
+                      <div key={item.id} className="flex items-center space-x-2 group">
                         <Checkbox
                           checked={item.completed}
                           onCheckedChange={(checked) => handleChecklistItemToggle(item.id, checked)}
@@ -438,7 +438,7 @@ const NoteCard = ({
 
             {isEditing && (
               <div className="flex items-center space-x-2 pt-2">
-                <Plus className="h-4 w-4 mt-0.5" style={{ color: colorConfig.text, opacity: 0.6 }} />
+                <Plus className="h-4 w-4 mt-0.5" style={{ color: colorConfig.text }} />
                 <ChecklistItemAutocomplete
                   value={newChecklistItem}
                   onChange={setNewChecklistItem}
@@ -484,7 +484,7 @@ const NoteCard = ({
         {/* Note metadata */}
         <div
           className="flex items-center justify-between mt-4 pt-4 note-metadata"
-          style={{ borderTop: `1px solid ${colorConfig.border}`, color: colorConfig.text, opacity: 0.65 }}
+          style={{ borderTop: `1px solid ${colorConfig.border}`, color: colorConfig.text }}
         >
           <span className="text-xs">
             {note.updated_at ? new Date(note.updated_at).toLocaleDateString() : 'No date'}

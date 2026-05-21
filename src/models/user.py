@@ -1,3 +1,5 @@
+"""User model and SQLAlchemy db instance."""
+
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
@@ -5,9 +7,12 @@ from datetime import datetime
 
 db = SQLAlchemy()
 
+
 class User(UserMixin, db.Model):
+    """Application user with authentication and admin role support."""
+
     __tablename__ = 'users'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
@@ -16,8 +21,7 @@ class User(UserMixin, db.Model):
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime)
-    
-    # Relationships
+
     notes = db.relationship('Note', backref='user', lazy=True, cascade='all, delete-orphan')
     shared_notes = db.relationship('SharedNote', backref='user', lazy=True, cascade='all, delete-orphan')
 

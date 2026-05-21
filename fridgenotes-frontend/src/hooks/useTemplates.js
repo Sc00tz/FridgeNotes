@@ -1,20 +1,18 @@
 /**
  * useTemplates Hook
- * 
- * Manages list templates for quick note creation.
- * Features:
- * - Local storage persistence per user
- * - Template CRUD operations
- * - Integration with note creation
- * 
+ *
+ * Manages list templates for quick note creation. Templates are stored in
+ * localStorage per user and sorted by usage frequency + recency so the most
+ * relevant ones surface first.
+ *
  * @param {Object} currentUser - Current authenticated user
- * @returns {Object} Template management utilities
+ * @returns {Object} Template list (sorted), CRUD actions, similarity search, and stats
  */
 
 import { useState, useEffect, useCallback } from 'react';
 
 const STORAGE_KEY_PREFIX = 'fridgenotes_templates_';
-const MAX_TEMPLATES = 50; // Reasonable limit per user
+const MAX_TEMPLATES = 50;
 
 export const useTemplates = (currentUser) => {
   const [templates, setTemplates] = useState([]);
@@ -23,7 +21,6 @@ export const useTemplates = (currentUser) => {
 
   const storageKey = currentUser ? `${STORAGE_KEY_PREFIX}${currentUser.id}` : null;
 
-  // Load templates from localStorage on mount
   useEffect(() => {
     if (!storageKey) return;
 
@@ -34,8 +31,6 @@ export const useTemplates = (currentUser) => {
         if (data.version === 1 && Array.isArray(data.templates)) {
           setTemplates(data.templates);
         } else {
-          // Handle legacy data or migrate
-          console.log('Migrating templates data format');
           setTemplates([]);
         }
       }
@@ -46,7 +41,6 @@ export const useTemplates = (currentUser) => {
     }
   }, [storageKey]);
 
-  // Save templates to localStorage
   const saveTemplates = useCallback((templatesList) => {
     if (!storageKey) return;
 
@@ -54,7 +48,7 @@ export const useTemplates = (currentUser) => {
       const data = {
         version: 1,
         templates: templatesList.slice(0, MAX_TEMPLATES),
-        lastUpdated: new Date().toISOString()
+        lastUpdated: new Date().toISOString(),
       };
       localStorage.setItem(storageKey, JSON.stringify(data));
     } catch (error) {
@@ -63,7 +57,6 @@ export const useTemplates = (currentUser) => {
     }
   }, [storageKey]);
 
-  // Create a new template
   const createTemplate = useCallback(async (templateData) => {
     if (!templateData.name || !Array.isArray(templateData.items)) {
       throw new Error('Invalid template data');
@@ -81,7 +74,7 @@ export const useTemplates = (currentUser) => {
         color: templateData.color || 'default',
         created_at: new Date().toISOString(),
         created_from_note_id: templateData.created_from_note_id || null,
-        usage_count: 0
+        usage_count: 0,
       };
 
       setTemplates(prev => {
@@ -99,7 +92,6 @@ export const useTemplates = (currentUser) => {
     }
   }, [saveTemplates]);
 
-  // Update an existing template
   const updateTemplate = useCallback(async (templateId, updates) => {
     setLoading(true);
     setError(null);
@@ -111,7 +103,7 @@ export const useTemplates = (currentUser) => {
             ? {
                 ...template,
                 ...updates,
-                updated_at: new Date().toISOString()
+                updated_at: new Date().toISOString(),
               }
             : template
         );
@@ -126,7 +118,6 @@ export const useTemplates = (currentUser) => {
     }
   }, [saveTemplates]);
 
-  // Delete a template
   const deleteTemplate = useCallback(async (templateId) => {
     setLoading(true);
     setError(null);
@@ -145,7 +136,6 @@ export const useTemplates = (currentUser) => {
     }
   }, [saveTemplates]);
 
-  // Increment usage count when template is used
   const useTemplate = useCallback(async (templateId) => {
     try {
       setTemplates(prev => {
@@ -154,7 +144,7 @@ export const useTemplates = (currentUser) => {
             ? {
                 ...template,
                 usage_count: (template.usage_count || 0) + 1,
-                last_used: new Date().toISOString()
+                last_used: new Date().toISOString(),
               }
             : template
         );
@@ -163,62 +153,54 @@ export const useTemplates = (currentUser) => {
       });
     } catch (error) {
       console.error('Failed to update template usage:', error);
-      // Don't throw - this is not critical
+      // Non-critical — do not rethrow.
     }
   }, [saveTemplates]);
 
-  // Get templates sorted by usage and recency
   const getSortedTemplates = useCallback(() => {
     return [...templates].sort((a, b) => {
-      // First sort by usage count (more used templates first)
       const usageA = a.usage_count || 0;
       const usageB = b.usage_count || 0;
-      
+
       if (usageA !== usageB) {
         return usageB - usageA;
       }
 
-      // Then by last used time (more recent first)
       const lastUsedA = a.last_used ? new Date(a.last_used).getTime() : 0;
       const lastUsedB = b.last_used ? new Date(b.last_used).getTime() : 0;
-      
+
       if (lastUsedA !== lastUsedB) {
         return lastUsedB - lastUsedA;
       }
 
-      // Finally by creation time (newest first)
-      const createdA = new Date(a.created_at).getTime();
-      const createdB = new Date(b.created_at).getTime();
-      return createdB - createdA;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
   }, [templates]);
 
-  // Find templates similar to a given note (for suggestions)
   const findSimilarTemplates = useCallback((note) => {
     if (!note || note.note_type !== 'checklist' || !note.checklist_items) {
       return [];
     }
 
     const noteItems = note.checklist_items.map(item => item.text.toLowerCase());
-    
+
     return templates
       .map(template => {
         const templateItems = template.items.map(item => item.toLowerCase());
-        const commonItems = noteItems.filter(item => 
+        const commonItems = noteItems.filter(item =>
           templateItems.some(tItem => tItem.includes(item) || item.includes(tItem))
         );
-        
+
         return {
           ...template,
-          similarity: commonItems.length / Math.max(noteItems.length, templateItems.length)
+          similarity: commonItems.length / Math.max(noteItems.length, templateItems.length),
         };
       })
-      .filter(t => t.similarity > 0.3) // At least 30% similarity
+      .filter(t => t.similarity > 0.3)
       .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, 3); // Top 3 matches
+      .slice(0, 3);
   }, [templates]);
 
-  // Clear all templates
   const clearTemplates = useCallback(() => {
     setTemplates([]);
     if (storageKey) {
@@ -238,8 +220,8 @@ export const useTemplates = (currentUser) => {
     clearTemplates,
     stats: {
       totalTemplates: templates.length,
-      totalUsage: templates.reduce((sum, t) => sum + (t.usage_count || 0), 0)
-    }
+      totalUsage: templates.reduce((sum, t) => sum + (t.usage_count || 0), 0),
+    },
   };
 };
 

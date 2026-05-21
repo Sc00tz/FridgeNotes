@@ -1,28 +1,25 @@
 /**
  * useAutocomplete Hook
- * 
- * Manages autocomplete data for shopping lists and checklist items.
- * Features:
- * - Learns from user's previously used items
- * - Frequency-based ranking of suggestions
- * - Local storage persistence
- * - Cleanup of old/unused items
- * 
+ *
+ * Manages autocomplete suggestions for checklist items. Learns from the
+ * user's previously entered items and ranks suggestions by frequency and
+ * recency. Data is persisted to localStorage per user.
+ *
  * @param {Object} currentUser - Current authenticated user
- * @returns {Object} Autocomplete utilities and data
+ * @returns {Object} { userItems, addItem, learnFromNotes, clearItems, cleanup, stats }
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 
 const STORAGE_KEY_PREFIX = 'fridgenotes_autocomplete_';
-const MAX_ITEMS = 500; // Maximum items to store per user
-const MIN_USAGE_COUNT = 2; // Minimum usage to keep item in suggestions
+const MAX_ITEMS = 500;
+const MIN_USAGE_COUNT = 2;
 
 export const useAutocomplete = (currentUser) => {
   const [userItems, setUserItems] = useState([]);
   const storageKey = currentUser ? `${STORAGE_KEY_PREFIX}${currentUser.id}` : null;
+  const learnThrottleRef = useRef({ lastTime: 0, lastCount: 0 });
 
-  // Load user items from localStorage on mount
   useEffect(() => {
     if (!storageKey) return;
 
@@ -30,12 +27,9 @@ export const useAutocomplete = (currentUser) => {
       const stored = localStorage.getItem(storageKey);
       if (stored) {
         const data = JSON.parse(stored);
-        // Validate structure and migrate if necessary
         if (data.version === 1 && Array.isArray(data.items)) {
           setUserItems(data.items);
         } else {
-          // Handle legacy data or invalid format
-          console.log('Migrating autocomplete data format');
           setUserItems([]);
         }
       }
@@ -45,15 +39,14 @@ export const useAutocomplete = (currentUser) => {
     }
   }, [storageKey]);
 
-  // Save user items to localStorage
   const saveUserItems = useCallback((items) => {
     if (!storageKey) return;
 
     try {
       const data = {
         version: 1,
-        items: items.slice(0, MAX_ITEMS), // Limit storage
-        lastUpdated: new Date().toISOString()
+        items: items.slice(0, MAX_ITEMS),
+        lastUpdated: new Date().toISOString(),
       };
       localStorage.setItem(storageKey, JSON.stringify(data));
     } catch (error) {
@@ -61,88 +54,66 @@ export const useAutocomplete = (currentUser) => {
     }
   }, [storageKey]);
 
-  // Add or update an item in user's autocomplete data
   const addItem = useCallback((itemText) => {
     if (!itemText || !itemText.trim()) return;
 
     const normalizedItem = itemText.trim();
 
     setUserItems(prevItems => {
-      // Find existing item
       const existingIndex = prevItems.findIndex(
         item => item.text.toLowerCase() === normalizedItem.toLowerCase()
       );
 
       let newItems;
       if (existingIndex >= 0) {
-        // Update existing item
         newItems = [...prevItems];
         newItems[existingIndex] = {
           ...newItems[existingIndex],
           count: newItems[existingIndex].count + 1,
-          lastUsed: new Date().toISOString()
+          lastUsed: new Date().toISOString(),
         };
       } else {
-        // Add new item
         newItems = [
           ...prevItems,
           {
             text: normalizedItem,
             count: 1,
             firstUsed: new Date().toISOString(),
-            lastUsed: new Date().toISOString()
-          }
+            lastUsed: new Date().toISOString(),
+          },
         ];
       }
 
-      // Sort by usage frequency and recency
       newItems.sort((a, b) => {
         const aScore = a.count * 10 + (new Date(a.lastUsed).getTime() / 1000000);
         const bScore = b.count * 10 + (new Date(b.lastUsed).getTime() / 1000000);
         return bScore - aScore;
       });
 
-      // Save to localStorage
       saveUserItems(newItems);
-
       return newItems;
     });
   }, [saveUserItems]);
 
-  // Learn from existing notes to populate initial autocomplete data
   /**
-   * Scans existing notes to learn common checklist items.
-   * 
-   * PERFORMANCE OPTIMIZATION: 
-   * This function implements incremental learning and throttling.
-   * - It only processes if 10 seconds have passed since the last scan.
-   * - It skips processing if the number of notes hasn't changed significantly.
-   * - This prevents the UI from freezing when notes are modified rapidly.
-   * 
-   * @param {Array} notes - The list of current user notes to learn from.
+   * Scans existing notes to seed the autocomplete list.
+   * Throttled so rapid note changes don't trigger repeated full scans —
+   * skips if fewer than 10 s have passed and the note count hasn't moved
+   * by at least 5.
    */
   const learnFromNotes = useCallback((notes) => {
     if (!notes || notes.length === 0) return;
 
-    // OPTIMIZATION: Incremental learning and throttling
-    // Only process if we haven't in the last 10 seconds or notes count changed significantly
     const now = Date.now();
-    const lastLearningTime = learnFromNotes._lastTime || 0;
-    const lastNotesCount = learnFromNotes._lastCount || 0;
+    const { lastTime, lastCount } = learnThrottleRef.current;
+    const timeSinceLastLearning = now - lastTime;
+    const countDifference = Math.abs(notes.length - lastCount);
 
-    const timeSinceLastLearning = now - lastLearningTime;
-    const countDifference = Math.abs(notes.length - lastNotesCount);
-
-    // Throttle: Skip if less than 10s passed AND change is minor
     if (timeSinceLastLearning < 10000 && countDifference < 5) {
       return;
     }
 
-    // Update markers for next run
-    learnFromNotes._lastTime = now;
-    learnFromNotes._lastCount = notes.length;
-
-    console.log('useAutocomplete: Learning from notes (throttled)...');
+    learnThrottleRef.current = { lastTime: now, lastCount: notes.length };
 
     const items = new Map();
 
@@ -161,7 +132,6 @@ export const useAutocomplete = (currentUser) => {
       }
     });
 
-    // Convert to user items format and merge with existing
     setUserItems(prevItems => {
       const existingMap = new Map(
         prevItems.map(item => [item.text.toLowerCase(), item])
@@ -169,32 +139,29 @@ export const useAutocomplete = (currentUser) => {
 
       const mergedItems = [];
 
-      // Add/update items from notes
       items.forEach((count, text) => {
         const existing = existingMap.get(text);
         if (existing) {
           mergedItems.push({
             ...existing,
-            count: Math.max(existing.count, count)
+            count: Math.max(existing.count, count),
           });
         } else if (count >= MIN_USAGE_COUNT) {
           mergedItems.push({
-            text: text.charAt(0).toUpperCase() + text.slice(1), // Capitalize
+            text: text.charAt(0).toUpperCase() + text.slice(1),
             count,
             firstUsed: new Date().toISOString(),
-            lastUsed: new Date().toISOString()
+            lastUsed: new Date().toISOString(),
           });
         }
       });
 
-      // Add existing items that weren't found in notes
       prevItems.forEach(item => {
         if (!items.has(item.text.toLowerCase())) {
           mergedItems.push(item);
         }
       });
 
-      // Sort and limit
       const sortedItems = mergedItems
         .sort((a, b) => {
           const aScore = a.count * 10 + (new Date(a.lastUsed).getTime() / 1000000);
@@ -208,14 +175,12 @@ export const useAutocomplete = (currentUser) => {
     });
   }, [saveUserItems]);
 
-  // Get user items as simple string array for autocomplete
   const userItemsArray = useMemo(() => {
     return userItems
       .filter(item => item.count >= MIN_USAGE_COUNT)
       .map(item => item.text);
   }, [userItems]);
 
-  // Clear all autocomplete data
   const clearItems = useCallback(() => {
     setUserItems([]);
     if (storageKey) {
@@ -223,7 +188,6 @@ export const useAutocomplete = (currentUser) => {
     }
   }, [storageKey]);
 
-  // Remove items that haven't been used recently
   const cleanup = useCallback(() => {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -250,8 +214,8 @@ export const useAutocomplete = (currentUser) => {
     cleanup,
     stats: {
       totalItems: userItems.length,
-      activeItems: userItemsArray.length
-    }
+      activeItems: userItemsArray.length,
+    },
   };
 };
 

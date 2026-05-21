@@ -1,26 +1,24 @@
-from flask_sqlalchemy import SQLAlchemy
+"""Label and NoteLabel models for the note tagging system."""
+
 from datetime import datetime
 from src.models.user import db
 
-# Import Note model for relationship - avoid circular import by importing after Label is defined
-# We'll define the relationship in the Note model instead
 
 class Label(db.Model):
+    """Hierarchical tag that can be applied to notes."""
+
     __tablename__ = 'labels'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    color = db.Column(db.String(20), nullable=False, default='#3b82f6')  # Default blue
+    color = db.Column(db.String(20), nullable=False, default='#3b82f6')
     parent_id = db.Column(db.Integer, db.ForeignKey('labels.id'), nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Self-referential relationship for hierarchical labels
+
     children = db.relationship('Label', backref=db.backref('parent', remote_side=[id]), lazy=True)
-    
-    # Note: The many-to-many relationship with notes is defined in the Note model to avoid circular imports
-    
+
     def __repr__(self):
         return f'<Label {self.id}: {self.name}>'
     
@@ -48,6 +46,7 @@ class Label(db.Model):
             return self.color
     
     def to_dict(self, include_hierarchy=False):
+        """Serialize the label to a dict, optionally including parent/children."""
         result = {
             'id': self.id,
             'name': self.name,
@@ -71,20 +70,22 @@ class Label(db.Model):
 
 
 class NoteLabel(db.Model):
+    """Association table linking notes to labels (many-to-many)."""
+
     __tablename__ = 'note_labels'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     note_id = db.Column(db.Integer, db.ForeignKey('notes.id'), nullable=False)
     label_id = db.Column(db.Integer, db.ForeignKey('labels.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Unique constraint to prevent duplicate label assignments
+
     __table_args__ = (db.UniqueConstraint('note_id', 'label_id', name='unique_note_label'),)
     
     def __repr__(self):
         return f'<NoteLabel {self.note_id}:{self.label_id}>'
     
     def to_dict(self):
+        """Serialize the note-label association to a dict."""
         return {
             'id': self.id,
             'note_id': self.note_id,

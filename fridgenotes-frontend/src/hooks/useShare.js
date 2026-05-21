@@ -1,3 +1,13 @@
+/**
+ * useShare Hook
+ *
+ * Manages note sharing operations (share with another user, hide a shared
+ * note from the current user's view). Emits WebSocket events so the
+ * recipient sees the share in real time.
+ *
+ * @returns {Object} { loading, error, success, shareNote, hideSharedNote, showError, showSuccess }
+ */
+
 import { useState, useCallback } from 'react';
 import apiClient from '../lib/api';
 import socketClient from '../lib/socket';
@@ -21,10 +31,9 @@ export const useShare = () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       await apiClient.shareNote(noteId, shareData);
 
-      // Emit WebSocket event for real-time notification
       if (socketClient.isConnected) {
         socketClient.emitNoteShared(noteId, shareData.username, shareData.access_level);
       }
@@ -42,11 +51,11 @@ export const useShare = () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       await apiClient.hideSharedNote(noteId, shareId);
-      
+
       showSuccess('Note hidden from your view');
-      return true; // Indicate success for state updates
+      return true;
     } catch (error) {
       showError('Failed to hide note: ' + error.message);
       throw error;
@@ -61,7 +70,7 @@ export const useShare = () => {
     success,
     shareNote,
     hideSharedNote,
-    showError,    // ✅ Add this
-    showSuccess   // ✅ Add this
+    showError,
+    showSuccess,
   };
 };

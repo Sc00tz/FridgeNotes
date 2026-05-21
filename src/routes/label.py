@@ -1,27 +1,29 @@
+"""Blueprint for label management and note-label association endpoints."""
+
 from flask import Blueprint, jsonify, request
 from flask_login import login_required, current_user
 from src.models.label import Label, NoteLabel, db
-from src.models.note import Note
+from src.models.note import Note, SharedNote
 from sqlalchemy import or_, func
 
 label_bp = Blueprint('label', __name__)
 
-# Get all labels for current user
+
 @label_bp.route('/labels', methods=['GET'])
 @login_required
 def get_labels():
-    """Get all labels for the current user"""
+    """Return all labels for the current user."""
     try:
         labels = Label.query.filter_by(user_id=current_user.id).order_by(Label.name).all()
         return jsonify([label.to_dict(include_hierarchy=True) for label in labels])
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Create a new label
+
 @label_bp.route('/labels', methods=['POST'])
 @login_required
 def create_label():
-    """Create a new label"""
+    """Create a new label for the current user."""
     try:
         data = request.json
         name = data.get('name', '').strip()
@@ -62,11 +64,11 @@ def create_label():
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
-# Update a label
+
 @label_bp.route('/labels/<int:label_id>', methods=['PUT'])
 @login_required
 def update_label(label_id):
-    """Update a label"""
+    """Update a label's name, color, or parent."""
     try:
         label = Label.query.filter_by(id=label_id, user_id=current_user.id).first_or_404()
         data = request.json
@@ -127,11 +129,11 @@ def update_label(label_id):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
-# Delete a label
+
 @label_bp.route('/labels/<int:label_id>', methods=['DELETE'])
 @login_required
 def delete_label(label_id):
-    """Delete a label and remove it from all notes"""
+    """Delete a label and remove all its note associations."""
     try:
         label = Label.query.filter_by(id=label_id, user_id=current_user.id).first_or_404()
         
@@ -148,11 +150,11 @@ def delete_label(label_id):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
-# Search/autocomplete labels
+
 @label_bp.route('/labels/search', methods=['GET'])
 @login_required
 def search_labels():
-    """Search labels for autocomplete"""
+    """Search labels by name for autocomplete (query param: q)."""
     try:
         query = request.args.get('q', '').strip()
         if not query:
@@ -199,105 +201,90 @@ def search_labels():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Add label to note
+
 @label_bp.route('/notes/<int:note_id>/labels', methods=['POST'])
 @login_required
 def add_label_to_note(note_id):
-    """Add a label to a note"""
+    """Associate a label with a note."""
     try:
-        # Verify note ownership or sharing access
         note = Note.query.get_or_404(note_id)
-        
+
         if note.user_id != current_user.id:
-            # Check if note is shared with current user with edit access
             from src.models.note import SharedNote
             shared_note = SharedNote.query.filter_by(note_id=note_id, user_id=current_user.id).first()
             if not shared_note or shared_note.access_level != 'edit':
                 return jsonify({'error': 'Access denied'}), 403
-        
+
         data = request.json
         label_id = data.get('label_id')
-        
+
         if not label_id:
             return jsonify({'error': 'Label ID is required'}), 400
-        
-        # Verify label ownership
+
         label = Label.query.filter_by(id=label_id, user_id=current_user.id).first()
         if not label:
             return jsonify({'error': 'Label not found'}), 404
-        
-        # Check if association already exists
+
         existing = NoteLabel.query.filter_by(note_id=note_id, label_id=label_id).first()
         if existing:
-            return jsonify(existing.to_dict()), 200  # Return existing association
-        
-        # Create the association
+            return jsonify(existing.to_dict()), 200
+
         note_label = NoteLabel(note_id=note_id, label_id=label_id)
         db.session.add(note_label)
         db.session.commit()
-        
+
         return jsonify(note_label.to_dict()), 201
-        
+
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Internal server error: {str(e)}'}), 500
 
-# Remove label from note
+
 @label_bp.route('/notes/<int:note_id>/labels/<int:label_id>', methods=['DELETE'])
 @login_required
 def remove_label_from_note(note_id, label_id):
-    """Remove a label from a note"""
+    """Remove a label association from a note."""
     try:
-        # Verify note ownership or sharing access
         note = Note.query.get_or_404(note_id)
-        
+
         if note.user_id != current_user.id:
-            # Check if note is shared with current user with edit access
             from src.models.note import SharedNote
             shared_note = SharedNote.query.filter_by(note_id=note_id, user_id=current_user.id).first()
             if not shared_note or shared_note.access_level != 'edit':
                 return jsonify({'error': 'Access denied'}), 403
-        
-        # Verify label exists and user has access to it
+
         label = Label.query.filter_by(id=label_id, user_id=current_user.id).first()
         if not label:
             return jsonify({'error': f'Label {label_id} not found'}), 404
-        
-        # Find the association with explicit type conversion
+
         note_label = NoteLabel.query.filter(
             NoteLabel.note_id == int(note_id),
             NoteLabel.label_id == int(label_id)
         ).first()
-        
+
         if not note_label:
-            # Association doesn't exist, but that's the desired state
-            return jsonify({'message': f'Label was not associated with note'}), 200
-            
-        # Store the ID for verification
+            return jsonify({'message': 'Label was not associated with note'}), 200
+
         association_id = note_label.id
-        
-        # Delete with verification
+
         db.session.delete(note_label)
-        db.session.flush()  # Flush to catch any constraint errors before commit
-        
-        # Verify deletion before committing
+        db.session.flush()
+
         verify_check = NoteLabel.query.get(association_id)
         if verify_check:
             db.session.rollback()
             return jsonify({'error': 'Failed to delete association'}), 500
-        
+
         db.session.commit()
-        
-        # Final verification that it's gone from database
+
         final_check = NoteLabel.query.filter(
             NoteLabel.note_id == int(note_id),
             NoteLabel.label_id == int(label_id)
         ).first()
-        
+
         if final_check:
             return jsonify({'error': 'Association deletion failed - database inconsistency'}), 500
-        
-        # Emit WebSocket event for real-time updates
+
         try:
             from src.websocket_events import socketio
             socketio.emit('label_removed', {
@@ -305,20 +292,19 @@ def remove_label_from_note(note_id, label_id):
                 'label_id': label_id
             }, room=f'user_{current_user.id}')
         except Exception:
-            # WebSocket errors shouldn't break the main functionality
             pass
-        
+
         return '', 204
-        
+
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Internal server error: {str(e)}'}), 500
 
-# Get notes by label
+
 @label_bp.route('/labels/<int:label_id>/notes', methods=['GET'])
 @login_required
 def get_notes_by_label(label_id):
-    """Get all notes with a specific label"""
+    """Return all notes tagged with a specific label."""
     try:
         # Verify label ownership
         label = Label.query.filter_by(id=label_id, user_id=current_user.id).first_or_404()
@@ -339,11 +325,11 @@ def get_notes_by_label(label_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Get label statistics
+
 @label_bp.route('/labels/stats', methods=['GET'])
 @login_required
 def get_label_stats():
-    """Get statistics about label usage"""
+    """Return per-label note counts for the current user."""
     try:
         # Get label counts
         label_counts = db.session.query(

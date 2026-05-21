@@ -105,7 +105,7 @@ const NoteCard = ({
     const textToAdd = itemText || newChecklistItem.trim();
     if (textToAdd) {
       const newItem = {
-        id: Date.now(), // Temporary ID
+        id: `temp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         text: textToAdd,
         completed: false,
         order: editedNote.checklist_items.length

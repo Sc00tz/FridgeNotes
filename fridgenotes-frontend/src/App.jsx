@@ -53,7 +53,8 @@ function App() {
     noteLabels.notes,
     noteLabels.labels,
     noteLabels.createNote,
-    noteLabels.createLabel
+    noteLabels.createLabel,
+    noteLabels.addLabelToNote
   );
 
   // UI state only
@@ -369,7 +370,7 @@ function App() {
 
       {/* Reminder Notifications */}
       <ReminderNotifications
-        notes={noteLabels.filteredNotes}
+        notes={noteLabels.notes}
         onMarkComplete={handleCompleteReminder}
         onSnooze={handleSnoozeReminder}
         onDismiss={handleDismissReminder}
@@ -385,7 +386,7 @@ function App() {
         queueSize={noteLabels.offlineSync?.queueSize}
         lastSync={noteLabels.offlineSync?.lastSync}
         syncErrors={noteLabels.offlineSync?.syncErrors}
-        onForceSync={noteLabels.offlineSync?.forcSync}
+        onForceSync={noteLabels.offlineSync?.forceSync}
         onClearQueue={noteLabels.offlineSync?.clearSyncQueue}
       />
     </div>

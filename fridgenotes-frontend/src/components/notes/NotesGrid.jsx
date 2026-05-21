@@ -4,9 +4,10 @@ import VirtualizedGrid from './VirtualizedGrid';
 
 /**
  * NotesGrid Component
- * 
- * Manages the layout and rendering of notes. 
- * Uses VirtualizedGrid for performance optimization with large lists.
+ *
+ * Filters, sorts, and renders the note list inside a VirtualizedGrid.
+ * Handles drag-and-drop reordering, blocking moves that would interleave
+ * pinned and unpinned notes.
  */
 const NotesGrid = ({
   notes,
@@ -26,18 +27,16 @@ const NotesGrid = ({
   onEditToggle,
   onReorder,
   userAutocompleteItems = [],
-  onAutocompleteAdd
+  onAutocompleteAdd,
 }) => {
   const [draggedNoteId, setDraggedNoteId] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const dragCounter = useRef(0);
 
-  // Filter and sort notes
   const filteredNotes = notes.filter(note => {
     if (!searchTerm) return showArchived ? note.archived : !note.archived;
 
-    // Check for label filter
     if (searchTerm.startsWith('label:')) {
       const labelName = searchTerm.substring(6).toLowerCase();
       const hasLabel = note.labels?.some(label =>
@@ -47,7 +46,6 @@ const NotesGrid = ({
       return hasLabel && matchesArchived;
     }
 
-    // Regular text search
     const matchesSearch =
       note.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       note.content?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -61,23 +59,19 @@ const NotesGrid = ({
     const matchesArchived = showArchived ? note.archived : !note.archived;
     return matchesSearch && matchesArchived;
   }).sort((a, b) => {
-    // First sort by pinned status (pinned notes first)
     if (a.pinned !== b.pinned) {
-      return b.pinned - a.pinned; // true (1) comes before false (0)
+      return b.pinned - a.pinned;
     }
 
-    // Then sort by position (ascending), then by created_at (descending) as fallback
     if (a.position !== undefined && b.position !== undefined) {
       return a.position - b.position;
     }
     return new Date(b.created_at) - new Date(a.created_at);
   });
 
-  // Drag and Drop Handlers
-  const handleDragStart = useCallback((e, noteId, index) => {
+  const handleDragStart = useCallback((e, noteId) => {
     const note = filteredNotes.find(n => n.id === noteId);
 
-    // Prevent dragging pinned notes
     if (note?.pinned) {
       e.preventDefault();
       return;
@@ -87,8 +81,6 @@ const NotesGrid = ({
     setIsDragging(true);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', noteId.toString());
-
-    // Add some visual feedback
     e.target.style.opacity = '0.5';
   }, [filteredNotes]);
 
@@ -111,7 +103,7 @@ const NotesGrid = ({
     setDragOverIndex(index);
   }, []);
 
-  const handleDragLeave = useCallback((e) => {
+  const handleDragLeave = useCallback(() => {
     dragCounter.current--;
     if (dragCounter.current === 0) {
       setDragOverIndex(null);
@@ -126,7 +118,7 @@ const NotesGrid = ({
 
     const draggedId = parseInt(e.dataTransfer.getData('text/plain'));
     if (!draggedId || draggedId === filteredNotes[dropIndex]?.id) {
-      return; // No change needed
+      return;
     }
 
     const draggedIndex = filteredNotes.findIndex(note => note.id === draggedId);
@@ -135,55 +127,46 @@ const NotesGrid = ({
     const draggedNote = filteredNotes[draggedIndex];
     const targetNote = filteredNotes[dropIndex];
 
-    // Prevent dropping pinned notes or dropping onto pinned positions
     if (draggedNote?.pinned || targetNote?.pinned) {
       return;
     }
 
-    // Separate pinned and unpinned notes
     const pinnedNotes = filteredNotes.filter(note => note.pinned);
     const unpinnedNotes = filteredNotes.filter(note => !note.pinned);
 
-    // Find indexes within unpinned notes only
     const unpinnedDraggedIndex = unpinnedNotes.findIndex(note => note.id === draggedId);
-    const unpinnedDropIndex = dropIndex - pinnedNotes.length; // Adjust for pinned notes at top
+    // Adjust drop index to be relative to the unpinned sublist.
+    const unpinnedDropIndex = dropIndex - pinnedNotes.length;
 
     if (unpinnedDraggedIndex === -1 || unpinnedDropIndex < 0) return;
 
-    // Reorder only the unpinned notes
     const newUnpinnedOrder = [...unpinnedNotes];
     const [movedNote] = newUnpinnedOrder.splice(unpinnedDraggedIndex, 1);
     newUnpinnedOrder.splice(unpinnedDropIndex, 0, movedNote);
 
-    // Combine pinned notes (unchanged) + reordered unpinned notes
     const newFilteredOrder = [...pinnedNotes, ...newUnpinnedOrder];
 
-    // Get ALL notes for the current category (active or archived)
     const currentCategoryNotes = notes.filter(note =>
       showArchived ? note.archived : !note.archived
     );
 
-    // Find notes that are in current category but not visible due to search
     const visibleNoteIds = new Set(newFilteredOrder.map(note => note.id));
     const hiddenNotes = currentCategoryNotes.filter(note => !visibleNoteIds.has(note.id));
 
-    // Final order: pinned notes first, then reordered unpinned notes, then hidden notes
     const finalOrder = [
       ...newFilteredOrder.map(note => note.id),
-      ...hiddenNotes.map(note => note.id)
+      ...hiddenNotes.map(note => note.id),
     ];
 
-    // Call the reorder function
     if (onReorder) {
       try {
         await onReorder(finalOrder);
-      } catch (error) {
-        // Could add a toast notification here
+      } catch {
+        // Reorder errors are non-fatal; the server is the source of truth.
       }
     }
   }, [filteredNotes, notes, showArchived, onReorder]);
 
-  // Container drop handler for dropping at the end
   const handleContainerDragOver = useCallback((e) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
@@ -192,7 +175,6 @@ const NotesGrid = ({
   const handleContainerDrop = useCallback(async (e) => {
     e.preventDefault();
 
-    // Only handle if not dropped on a specific note
     if (e.target.getAttribute('data-note-id')) {
       return;
     }
@@ -202,15 +184,13 @@ const NotesGrid = ({
 
     const draggedIndex = filteredNotes.findIndex(note => note.id === draggedId);
     if (draggedIndex === -1 || draggedIndex === filteredNotes.length - 1) {
-      return; // Already at the end
+      return;
     }
 
-    // Move to end
     const newFilteredOrder = [...filteredNotes];
     const [draggedNote] = newFilteredOrder.splice(draggedIndex, 1);
     newFilteredOrder.push(draggedNote);
 
-    // Same logic as handleDrop - get complete order for current category
     const currentCategoryNotes = notes.filter(note =>
       showArchived ? note.archived : !note.archived
     );
@@ -220,14 +200,14 @@ const NotesGrid = ({
 
     const finalOrder = [
       ...newFilteredOrder.map(note => note.id),
-      ...hiddenNotes.map(note => note.id)
+      ...hiddenNotes.map(note => note.id),
     ];
 
     if (onReorder) {
       try {
         await onReorder(finalOrder);
-      } catch (error) {
-        // Error handled silently
+      } catch {
+        // Non-fatal.
       }
     }
 
@@ -249,8 +229,7 @@ const NotesGrid = ({
   return (
     <VirtualizedGrid
       items={filteredNotes}
-      className={`grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 min-h-[200px] ${isDragging ? 'drag-active' : ''
-        }`}
+      className={`grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 min-h-[200px] ${isDragging ? 'drag-active' : ''}`}
       itemHeight={300}
       buffer={2}
       renderItem={(note, index) => {
@@ -261,10 +240,7 @@ const NotesGrid = ({
           <div
             key={note.id}
             data-note-id={note.id}
-            className={`transition-all duration-200 ${isDraggedOver ? 'scale-105 ring-2 ring-blue-500 ring-opacity-50' : ''
-              } ${isBeingDragged ? 'opacity-50 scale-95' : ''
-              } ${note.pinned ? 'cursor-default' : 'cursor-grab'
-              }`}
+            className={`transition-all duration-200 ${isDraggedOver ? 'scale-105 ring-2 ring-blue-500 ring-opacity-50' : ''} ${isBeingDragged ? 'opacity-50 scale-95' : ''} ${note.pinned ? 'cursor-default' : 'cursor-grab'}`}
             draggable={(!editingNoteId || editingNoteId !== note.id) && !note.pinned}
             onDragStart={(e) => handleDragStart(e, note.id, index)}
             onDragEnd={handleDragEnd}
@@ -298,6 +274,5 @@ const NotesGrid = ({
     />
   );
 };
-
 
 export default NotesGrid;

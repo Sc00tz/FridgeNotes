@@ -1,26 +1,22 @@
 /**
  * useOfflineSync Hook
- * 
- * Enhanced offline sync handling for FridgeNotes.
- * Features:
- * - Detect online/offline status
- * - Queue operations while offline
- * - Auto-sync when back online
- * - Conflict resolution
- * - Local storage fallback
- * - Background sync with service worker
- * 
+ *
+ * Detects online/offline status, queues API operations while offline, and
+ * automatically replays them when connectivity is restored. Provides an
+ * `executeWithOfflineSupport` wrapper that callers can use in place of
+ * direct API calls to get transparent offline queuing.
+ *
  * @param {Object} api - API client instance
  * @param {Object} currentUser - Current authenticated user
- * @returns {Object} Offline sync utilities and state
+ * @returns {Object} Sync state and operation utilities
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 const STORAGE_KEY_PREFIX = 'fridgenotes_offline_';
 const QUEUE_STORAGE_KEY = 'fridgenotes_sync_queue';
-const MAX_QUEUE_SIZE = 1000; // Maximum queued operations
-const SYNC_RETRY_DELAY = 5000; // 5 seconds
+const MAX_QUEUE_SIZE = 1000;
+const SYNC_RETRY_DELAY = 5000;
 const MAX_RETRY_ATTEMPTS = 3;
 
 export const useOfflineSync = (api, currentUser) => {
@@ -29,13 +25,16 @@ export const useOfflineSync = (api, currentUser) => {
   const [queueSize, setQueueSize] = useState(0);
   const [lastSync, setLastSync] = useState(null);
   const [syncErrors, setSyncErrors] = useState([]);
-  
+
   const syncTimeoutRef = useRef(null);
   const retryCountRef = useRef(0);
 
+  // Holds a ref to the latest syncPendingOperations so the online event
+  // handler never captures a stale closure.
+  const syncPendingOperationsRef = useRef(null);
+
   const storageKey = currentUser ? `${STORAGE_KEY_PREFIX}${currentUser.id}` : null;
 
-  // Initialize sync queue from localStorage
   useEffect(() => {
     if (!storageKey) return;
 
@@ -50,15 +49,14 @@ export const useOfflineSync = (api, currentUser) => {
     }
   }, [storageKey]);
 
-  // Monitor online/offline status
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
-      retryCountRef.current = 0; // Reset retry count
-      // Trigger sync after a short delay to ensure connection is stable
+      retryCountRef.current = 0;
       if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+      // Invoke through the ref so we always call the latest version.
       syncTimeoutRef.current = setTimeout(() => {
-        syncPendingOperations();
+        syncPendingOperationsRef.current?.();
       }, 1000);
     };
 
@@ -82,7 +80,6 @@ export const useOfflineSync = (api, currentUser) => {
     };
   }, []);
 
-  // Get sync queue from localStorage
   const getSyncQueue = useCallback(() => {
     try {
       const stored = localStorage.getItem(QUEUE_STORAGE_KEY);
@@ -93,10 +90,9 @@ export const useOfflineSync = (api, currentUser) => {
     }
   }, []);
 
-  // Save sync queue to localStorage
   const saveSyncQueue = useCallback((queue) => {
     try {
-      const limitedQueue = queue.slice(-MAX_QUEUE_SIZE); // Keep only recent operations
+      const limitedQueue = queue.slice(-MAX_QUEUE_SIZE);
       localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(limitedQueue));
       setQueueSize(limitedQueue.length);
     } catch (error) {
@@ -104,29 +100,27 @@ export const useOfflineSync = (api, currentUser) => {
     }
   }, []);
 
-  // Add operation to sync queue
   const queueOperation = useCallback((operation) => {
     const queue = getSyncQueue();
     const queuedOperation = {
       id: `op_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       timestamp: new Date().toISOString(),
       retryCount: 0,
-      ...operation
+      ...operation,
     };
-    
+
     queue.push(queuedOperation);
     saveSyncQueue(queue);
-    
+
     return queuedOperation.id;
   }, [getSyncQueue, saveSyncQueue]);
 
-  // Execute a single operation
   const executeOperation = useCallback(async (operation) => {
-    const { type, endpoint, method = 'POST', data, noteId } = operation;
+    const { type, method = 'POST', data, noteId } = operation;
 
     try {
       let result;
-      
+
       switch (type) {
         case 'create_note':
           result = await api.createNote(data);
@@ -150,8 +144,7 @@ export const useOfflineSync = (api, currentUser) => {
           result = await api.reorderNotes(data.noteIds);
           break;
         case 'custom':
-          // Custom API call
-          result = await api[method.toLowerCase()](endpoint, data);
+          result = await api[method.toLowerCase()](operation.endpoint, data);
           break;
         default:
           throw new Error(`Unknown operation type: ${type}`);
@@ -164,7 +157,6 @@ export const useOfflineSync = (api, currentUser) => {
     }
   }, [api]);
 
-  // Sync all pending operations
   const syncPendingOperations = useCallback(async () => {
     if (!isOnline || isSyncing || !currentUser) return;
 
@@ -173,20 +165,19 @@ export const useOfflineSync = (api, currentUser) => {
 
     setIsSyncing(true);
     setSyncErrors([]);
-    
+
     const results = {
       successful: 0,
       failed: 0,
-      errors: []
+      errors: [],
     };
 
     try {
-      // Execute operations in order
       const remainingQueue = [];
-      
+
       for (const operation of queue) {
         const result = await executeOperation(operation);
-        
+
         if (result.success) {
           results.successful++;
         } else {
@@ -194,88 +185,79 @@ export const useOfflineSync = (api, currentUser) => {
           results.errors.push({
             operation: operation.type,
             error: result.error,
-            timestamp: operation.timestamp
+            timestamp: operation.timestamp,
           });
-          
-          // Retry failed operations up to MAX_RETRY_ATTEMPTS
+
           if (operation.retryCount < MAX_RETRY_ATTEMPTS) {
             remainingQueue.push({
               ...operation,
-              retryCount: (operation.retryCount || 0) + 1
+              retryCount: (operation.retryCount || 0) + 1,
             });
           }
         }
       }
 
-      // Update queue with remaining failed operations
       saveSyncQueue(remainingQueue);
-      
-      // Update sync status
       setLastSync(new Date().toISOString());
       setSyncErrors(results.errors);
-      
-      // If there are still failed operations, schedule a retry
+
       if (remainingQueue.length > 0 && retryCountRef.current < MAX_RETRY_ATTEMPTS) {
         retryCountRef.current++;
         syncTimeoutRef.current = setTimeout(() => {
           syncPendingOperations();
-        }, SYNC_RETRY_DELAY * retryCountRef.current); // Exponential backoff
+        }, SYNC_RETRY_DELAY * retryCountRef.current);
       } else {
         retryCountRef.current = 0;
       }
 
       return results;
-      
     } catch (error) {
       console.error('Sync failed:', error);
       setSyncErrors([{ error: error.message, timestamp: new Date().toISOString() }]);
-      
-      // Schedule retry
+
       if (retryCountRef.current < MAX_RETRY_ATTEMPTS) {
         retryCountRef.current++;
         syncTimeoutRef.current = setTimeout(() => {
           syncPendingOperations();
         }, SYNC_RETRY_DELAY * retryCountRef.current);
       }
-      
+
       throw error;
     } finally {
       setIsSyncing(false);
     }
   }, [isOnline, isSyncing, currentUser, getSyncQueue, executeOperation, saveSyncQueue]);
 
-  // Wrapper for API operations that handles offline queueing
+  syncPendingOperationsRef.current = syncPendingOperations;
+
   const executeWithOfflineSupport = useCallback(async (operationConfig) => {
     if (isOnline) {
       try {
         return await executeOperation(operationConfig);
       } catch (error) {
-        // If online but operation failed, queue it for retry
         queueOperation(operationConfig);
         throw error;
       }
     } else {
-      // Queue operation for when back online
       const operationId = queueOperation(operationConfig);
       return {
         success: false,
         queued: true,
         operationId,
-        message: 'Operation queued for when back online'
+        message: 'Operation queued for when back online',
       };
     }
   }, [isOnline, executeOperation, queueOperation]);
 
-  // Save data locally for offline access
   const saveToLocalCache = useCallback((key, data) => {
     if (!storageKey) return;
-    
+
     try {
       const fullKey = `${storageKey}_${key}`;
       const cacheData = {
         data,
         timestamp: new Date().toISOString(),
-        version: 1
+        version: 1,
       };
       localStorage.setItem(fullKey, JSON.stringify(cacheData));
     } catch (error) {
@@ -283,24 +265,22 @@ export const useOfflineSync = (api, currentUser) => {
     }
   }, [storageKey]);
 
-  // Load data from local cache
   const loadFromLocalCache = useCallback((key, maxAge = 24 * 60 * 60 * 1000) => {
     if (!storageKey) return null;
-    
+
     try {
       const fullKey = `${storageKey}_${key}`;
       const stored = localStorage.getItem(fullKey);
       if (!stored) return null;
-      
+
       const cacheData = JSON.parse(stored);
       const age = Date.now() - new Date(cacheData.timestamp).getTime();
-      
-      // Check if cache is still valid
+
       if (age > maxAge) {
         localStorage.removeItem(fullKey);
         return null;
       }
-      
+
       return cacheData.data;
     } catch (error) {
       console.error('Error loading from local cache:', error);
@@ -308,15 +288,13 @@ export const useOfflineSync = (api, currentUser) => {
     }
   }, [storageKey]);
 
-  // Clear sync queue
   const clearSyncQueue = useCallback(() => {
     localStorage.removeItem(QUEUE_STORAGE_KEY);
     setQueueSize(0);
     setSyncErrors([]);
   }, []);
 
-  // Manual sync trigger
-  const forcSync = useCallback(async () => {
+  const forceSync = useCallback(async () => {
     if (isOnline) {
       return await syncPendingOperations();
     } else {
@@ -325,24 +303,21 @@ export const useOfflineSync = (api, currentUser) => {
   }, [isOnline, syncPendingOperations]);
 
   return {
-    // Status
     isOnline,
     isSyncing,
     queueSize,
     lastSync,
     syncErrors,
-    
-    // Operations
+
     executeWithOfflineSupport,
     saveToLocalCache,
     loadFromLocalCache,
     syncPendingOperations,
-    forcSync,
+    forceSync,
     clearSyncQueue,
-    
-    // Queue management
+
     queueOperation,
-    getSyncQueue: () => getSyncQueue().length
+    getSyncQueue: () => getSyncQueue().length,
   };
 };
 

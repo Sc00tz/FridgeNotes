@@ -1,6 +1,4 @@
-"""
-This blueprint handles all API endpoints related to notes.
-"""
+"""Blueprint for all note-related API endpoints."""
 
 from flask import Blueprint, jsonify, request
 from flask_login import login_required, current_user
@@ -15,7 +13,7 @@ note_bp = Blueprint('note', __name__)
 @note_bp.route('/debug/auth', methods=['GET'])
 @login_required
 def debug_auth():
-    """A debug endpoint to check the current user's authentication status."""
+    """Return the current user's authentication status."""
     return jsonify({
         'authenticated': True,
         'user_id': current_user.id,
@@ -26,7 +24,7 @@ def debug_auth():
 @note_bp.route('/debug/schema', methods=['GET'])
 @login_required
 def debug_schema():
-    """A debug endpoint to inspect the current database schema."""
+    """Return the current database schema and migration history."""
     try:
         from sqlalchemy import text
         from flask import current_app
@@ -78,10 +76,9 @@ def create_new_note():
 @note_bp.route('/notes/<int:note_id>', methods=['GET'])
 @login_required
 def get_single_note(note_id):
-    """Gets a single note by its ID."""
+    """Return a single note by ID, checking ownership or share access."""
     note = Note.query.get_or_404(note_id)
-    
-    # Check if the user owns the note or has access through sharing.
+
     if note.user_id != current_user.id:
         shared_note = SharedNote.query.filter_by(note_id=note_id, user_id=current_user.id).first()
         if not shared_note:
@@ -107,10 +104,9 @@ def delete_existing_note(note_id):
 @note_bp.route('/notes/<int:note_id>/checklist-items/<int:item_id>', methods=['PUT'])
 @login_required
 def update_checklist_item(note_id, item_id):
-    """Update a checklist item"""
+    """Update a checklist item's text or completion state."""
     note = Note.query.get_or_404(note_id)
-    
-    # Check permissions
+
     if note.user_id != current_user.id:
         shared_note = SharedNote.query.filter_by(note_id=note_id, user_id=current_user.id).first()
         if not shared_note or shared_note.access_level != 'edit':
@@ -134,35 +130,31 @@ def update_checklist_item(note_id, item_id):
 @note_bp.route('/notes/<int:note_id>/share', methods=['POST'])
 @login_required
 def share_note(note_id):
-    """Share a note with another user"""
+    """Share a note with another user by username."""
     note = Note.query.get_or_404(note_id)
-    
-    # Only the owner can share
+
     if note.user_id != current_user.id:
         return jsonify({'error': 'Access denied'}), 403
-    
+
     data = request.json
-    
-    # Check if user exists
+
     target_user = User.query.filter_by(username=data['username']).first()
     if not target_user:
         return jsonify({'error': 'User not found'}), 404
-    
-    # Check if already shared
+
     existing_share = SharedNote.query.filter_by(note_id=note_id, user_id=target_user.id).first()
     if existing_share:
         return jsonify({'error': 'Note already shared with this user'}), 400
-    
+
     shared_note = SharedNote(
         note_id=note_id,
         user_id=target_user.id,
         access_level=data.get('access_level', 'read')
     )
-    
+
     db.session.add(shared_note)
     db.session.commit()
-    
-    # Broadcast the sharing event
+
     broadcast_note_update(note_id, 'shared', {
         'shared_with': target_user.username,
         'access_level': shared_note.access_level
@@ -173,58 +165,54 @@ def share_note(note_id):
 @note_bp.route('/notes/<int:note_id>/shares', methods=['GET'])
 @login_required
 def get_note_shares(note_id):
-    """Get all shares for a note"""
+    """Return all share records for a note."""
     note = Note.query.get_or_404(note_id)
-    
-    # Check permissions
+
     if note.user_id != current_user.id:
         shared_note = SharedNote.query.filter_by(note_id=note_id, user_id=current_user.id).first()
         if not shared_note:
             return jsonify({'error': 'Access denied'}), 403
-    
+
     shares = SharedNote.query.filter_by(note_id=note_id).all()
     return jsonify([share.to_dict() for share in shares])
+
 
 @note_bp.route('/notes/<int:note_id>/shares/<int:share_id>', methods=['DELETE'])
 @login_required
 def unshare_note(note_id, share_id):
-    """Remove a share"""
+    """Remove a share record, restricted to the note owner."""
     note = Note.query.get_or_404(note_id)
-    
-    # Only the owner can unshare
+
     if note.user_id != current_user.id:
         return jsonify({'error': 'Access denied'}), 403
-    
+
     share = SharedNote.query.filter_by(id=share_id, note_id=note_id).first_or_404()
-    
-    # Broadcast the unsharing event
+
     broadcast_note_update(note_id, 'unshared', {
         'unshared_from': share.user.username if hasattr(share, 'user') and share.user else 'Unknown'
     })
-    
+
     db.session.delete(share)
     db.session.commit()
-    
+
     return '', 204
 
-# NEW ENDPOINT: Hide/Unhide shared notes
+
 @note_bp.route('/notes/<int:note_id>/shares/<int:share_id>/hide', methods=['PUT'])
 @login_required
 def toggle_shared_note_visibility(note_id, share_id):
-    """Toggle visibility of a shared note for the recipient"""
-    # Find the share record
+    """Toggle whether the current user has hidden a note shared with them."""
     share = SharedNote.query.filter_by(id=share_id, note_id=note_id).first_or_404()
-    
-    # Only the recipient can hide/unhide the note
+
     if share.user_id != current_user.id:
         return jsonify({'error': 'Access denied - you can only hide notes shared with you'}), 403
-    
+
     data = request.json
-    hidden = data.get('hidden', not share.hidden_by_recipient)  # Toggle if not specified
-    
+    hidden = data.get('hidden', not share.hidden_by_recipient)
+
     share.hidden_by_recipient = hidden
     db.session.commit()
-    
+
     return jsonify({
         'share_id': share.id,
         'note_id': note_id,
@@ -232,91 +220,84 @@ def toggle_shared_note_visibility(note_id, share_id):
         'message': 'Note hidden from your view' if hidden else 'Note restored to your view'
     })
 
-# NEW ENDPOINT: Get hidden shared notes
+
 @note_bp.route('/notes/hidden', methods=['GET'])
 @login_required
 def get_hidden_shared_notes():
-    """Get all hidden shared notes for the current user"""
+    """Return all shared notes the current user has hidden."""
     user_id = current_user.id
-    
-    # Get hidden shared notes
+
     hidden_notes_query = db.session.query(Note).join(SharedNote).filter(
         SharedNote.user_id == user_id,
         SharedNote.hidden_by_recipient == True
     ).all()
-    
+
     return jsonify([note.to_dict(current_user_id=current_user.id) for note in hidden_notes_query])
 
-# NEW ENDPOINT: Reorder notes
+
 @note_bp.route('/notes/reorder', methods=['PUT'])
 @login_required
 def reorder_notes():
-    """Reorder notes for the current user"""
+    """Update position of the current user's notes based on the provided order."""
     data = request.json
     note_ids = data.get('note_ids', [])
-    
+
     if not note_ids:
         return jsonify({'error': 'No note IDs provided'}), 400
-    
+
     try:
-        # Verify all notes belong to the current user
         user_notes = Note.query.filter(
             Note.id.in_(note_ids),
             Note.user_id == current_user.id
         ).all()
-        
+
         if len(user_notes) != len(note_ids):
             return jsonify({'error': 'Some notes not found or access denied'}), 403
-        
-        # Update positions
+
         for position, note_id in enumerate(note_ids):
             note = next((n for n in user_notes if n.id == note_id), None)
             if note:
                 note.position = position
-        
+
         db.session.commit()
-        
-        # Broadcast reorder event
+
         try:
             broadcast_notes_reorder(current_user.id, note_ids)
         except Exception as e:
             print(f"Warning: Error broadcasting reorder: {e}")
-        
+
         return jsonify({
             'message': 'Notes reordered successfully',
             'note_ids': note_ids
         })
-        
+
     except Exception as e:
         print(f"Error in reorder_notes: {e}")
         db.session.rollback()
         return jsonify({'error': 'Failed to reorder notes'}), 500
 
-# NEW ENDPOINT: Pin/Unpin notes
+
 @note_bp.route('/notes/<int:note_id>/pin', methods=['PUT'])
 @login_required
 def toggle_note_pin(note_id):
-    """Toggle pin status of a note"""
+    """Set the pinned status of a note."""
     data = request.json
     pinned = data.get('pinned', None)
-    
+
     if pinned is None:
         return jsonify({'error': 'pinned field is required'}), 400
-    
+
     try:
         note = Note.query.get_or_404(note_id)
-        
-        # Check permissions - user must own the note or have edit access
+
         if note.user_id != current_user.id:
             shared_note = SharedNote.query.filter_by(note_id=note_id, user_id=current_user.id).first()
             if not shared_note or shared_note.access_level != 'edit':
                 return jsonify({'error': 'Access denied'}), 403
-        
-        # Update the pinned status
+
         note.pinned = pinned
         db.session.commit()
-        
-        # Broadcast the pin change event
+
         try:
             from src.websocket_events import broadcast_note_update
             broadcast_note_update(note_id, 'pinned', {
@@ -325,111 +306,104 @@ def toggle_note_pin(note_id):
             })
         except Exception as e:
             print(f"Warning: Error broadcasting pin change: {e}")
-        
+
         return jsonify({
             'note_id': note_id,
             'pinned': note.pinned,
             'message': 'Note pinned' if pinned else 'Note unpinned'
         })
-        
+
     except Exception as e:
         print(f"Error in toggle_note_pin: {e}")
         db.session.rollback()
         return jsonify({'error': 'Failed to update note pin status'}), 500
 
-# Reminder-specific endpoints
+
 @note_bp.route('/notes/<int:note_id>/reminder/complete', methods=['POST'])
 @login_required
 def complete_reminder(note_id):
-    """Mark a note's reminder as completed"""
+    """Mark a note's reminder as completed and clear any active snooze."""
     try:
         note = Note.query.get_or_404(note_id)
-        
-        # Check permissions
+
         if note.user_id != current_user.id:
             shared_note = SharedNote.query.filter_by(note_id=note_id, user_id=current_user.id).first()
             if not shared_note or shared_note.access_level != 'edit':
                 return jsonify({'error': 'Access denied'}), 403
-        
-        # Mark reminder as completed
+
         note.reminder_completed = True
-        note.reminder_snoozed_until = None  # Clear any snooze
+        note.reminder_snoozed_until = None
         db.session.commit()
-        
-        # Broadcast update
+
         note_dict = note.to_dict(current_user_id=current_user.id)
         broadcast_note_update(note_id, 'reminder_completed', note_dict)
-        
+
         return jsonify({
             'note_id': note_id,
             'reminder_completed': True,
             'message': 'Reminder marked as completed'
         })
-        
+
     except Exception as e:
         print(f"Error in complete_reminder: {e}")
         db.session.rollback()
         return jsonify({'error': 'Failed to complete reminder'}), 500
 
+
 @note_bp.route('/notes/<int:note_id>/reminder/snooze', methods=['POST'])
 @login_required
 def snooze_reminder(note_id):
-    """Snooze a note's reminder until a specified time"""
+    """Snooze a note's reminder until a specified ISO datetime."""
     try:
         data = request.json
         snooze_until = data.get('snooze_until')
-        
+
         if not snooze_until:
             return jsonify({'error': 'snooze_until is required'}), 400
-            
+
         note = Note.query.get_or_404(note_id)
-        
-        # Check permissions
+
         if note.user_id != current_user.id:
             shared_note = SharedNote.query.filter_by(note_id=note_id, user_id=current_user.id).first()
             if not shared_note or shared_note.access_level != 'edit':
                 return jsonify({'error': 'Access denied'}), 403
-        
-        # Parse and set snooze time
+
         snooze_datetime = datetime.fromisoformat(snooze_until.replace('Z', '+00:00'))
         note.reminder_snoozed_until = snooze_datetime
         db.session.commit()
-        
-        # Broadcast update
+
         note_dict = note.to_dict(current_user_id=current_user.id)
         broadcast_note_update(note_id, 'reminder_snoozed', note_dict)
-        
+
         return jsonify({
             'note_id': note_id,
             'reminder_snoozed_until': snooze_until,
             'message': f'Reminder snoozed until {snooze_datetime.strftime("%Y-%m-%d %H:%M")}'
         })
-        
+
     except Exception as e:
         print(f"Error in snooze_reminder: {e}")
         db.session.rollback()
         return jsonify({'error': 'Failed to snooze reminder'}), 500
 
+
 @note_bp.route('/notes/<int:note_id>/reminder/dismiss', methods=['POST'])
 @login_required
 def dismiss_reminder(note_id):
-    """Dismiss a reminder notification without completing it"""
+    """Dismiss a reminder notification for the current session without completing it."""
     try:
         note = Note.query.get_or_404(note_id)
-        
-        # Check permissions
+
         if note.user_id != current_user.id:
             shared_note = SharedNote.query.filter_by(note_id=note_id, user_id=current_user.id).first()
             if not shared_note:
                 return jsonify({'error': 'Access denied'}), 403
-        
-        # Just return success - this is mainly for frontend state management
-        # The reminder will still be active, just dismissed from notifications
+
         return jsonify({
             'note_id': note_id,
             'message': 'Reminder notification dismissed'
         })
-        
+
     except Exception as e:
         print(f"Error in dismiss_reminder: {e}")
         return jsonify({'error': 'Failed to dismiss reminder'}), 500

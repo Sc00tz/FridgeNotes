@@ -1,9 +1,4 @@
-"""
-This service handles the business logic for notes.
-
-It provides functions to get, create, update, and delete notes,
-handling all database interactions and business rules.
-"""
+"""Business logic for note operations including CRUD and real-time broadcast."""
 
 from src.models.note import Note, ChecklistItem, SharedNote, db
 from src.models.user import User
@@ -11,11 +6,9 @@ from src.websocket_events import broadcast_note_update, broadcast_checklist_togg
 from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy import and_, or_
 
+
 def get_notes_for_user(user_id):
-    """
-    Gets all notes for a given user, including shared notes.
-    
-    OPTIMIZED: Single query with better loading strategies to reduce database hits.
+    """Return all notes for a user, including notes shared with them.
 
     Args:
         user_id: The ID of the user to fetch notes for.
@@ -24,12 +17,10 @@ def get_notes_for_user(user_id):
         A list of note dictionaries.
     """
     try:
-        # OPTIMIZATION: Single optimized query that gets both owned and shared notes
-        # Using selectinload instead of subqueryload for better performance with many notes
         notes_query = db.session.query(Note).options(
-            selectinload(Note.checklist_items),  # More efficient than subqueryload for 1:many
-            joinedload(Note.labels),             # Good for many:many with reasonable label counts
-            selectinload(Note.shared_notes)      # More efficient loading
+            selectinload(Note.checklist_items),
+            joinedload(Note.labels),
+            selectinload(Note.shared_notes)
         ).filter(
             or_(
                 # User's own notes
@@ -45,25 +36,22 @@ def get_notes_for_user(user_id):
                 )
             )
         ).order_by(Note.pinned.desc(), Note.position.asc()).all()
-        
+
     except Exception as e:
         print(f"Warning: Error in optimized query, falling back to legacy method: {e}")
-        # Fallback to original separate queries if there's a schema issue
         return _get_notes_for_user_legacy(user_id)
 
-    # Convert the note objects to dictionaries for the API response.
     return [note.to_dict(current_user_id=user_id) for note in notes_query]
 
+
 def _get_notes_for_user_legacy(user_id):
-    """Legacy fallback method for older database schemas."""
-    # Get user's own notes
+    """Fallback note query for older database schemas missing hidden_by_recipient."""
     own_notes = Note.query.options(
         selectinload(Note.checklist_items),
         joinedload(Note.labels),
         selectinload(Note.shared_notes)
     ).filter_by(user_id=user_id).order_by(Note.pinned.desc(), Note.position.asc()).all()
 
-    # Get shared notes (fallback for missing hidden_by_recipient column)
     shared_note_ids = db.session.query(SharedNote.note_id).filter_by(user_id=user_id).all()
     if shared_note_ids:
         shared_notes_query = Note.query.options(
@@ -74,13 +62,13 @@ def _get_notes_for_user_legacy(user_id):
     else:
         shared_notes_query = []
 
-    # Combine notes, removing duplicates
     all_notes = {note.id: note for note in own_notes + shared_notes_query}
-    
+
     return [note.to_dict(current_user_id=user_id) for note in all_notes.values()]
 
+
 def create_note(user_id, data):
-    """Creates a new note for a given user.
+    """Create a new note for the given user.
 
     Args:
         user_id: The ID of the user creating the note.
@@ -89,11 +77,9 @@ def create_note(user_id, data):
     Returns:
         The newly created note object.
     """
-    # Determine the position for the new note.
     max_position = db.session.query(db.func.max(Note.position)).filter_by(user_id=user_id).scalar()
     next_position = (max_position or -1) + 1
 
-    # Create the new note object.
     note = Note(
         user_id=user_id,
         title=data.get('title', ''),
@@ -104,9 +90,8 @@ def create_note(user_id, data):
     )
 
     db.session.add(note)
-    db.session.flush()  # Flush to get the new note's ID.
+    db.session.flush()
 
-    # If it's a checklist, create the checklist items.
     if note.note_type == 'checklist' and 'checklist_items' in data:
         for i, item_data in enumerate(data['checklist_items']):
             item = ChecklistItem(
@@ -118,11 +103,9 @@ def create_note(user_id, data):
             )
             db.session.add(item)
 
-    # If labels are provided, associate them with the note.
     if 'label_ids' in data and data['label_ids']:
         from src.models.label import Label, NoteLabel
         for label_id in data['label_ids']:
-            # Ensure the user owns the label before associating it.
             label = Label.query.filter_by(id=label_id, user_id=user_id).first()
             if label:
                 note_label = NoteLabel(note_id=note.id, label_id=label_id)
@@ -130,13 +113,13 @@ def create_note(user_id, data):
 
     db.session.commit()
 
-    # Notify connected clients about the new note.
     broadcast_note_update(note.id, 'created', note.to_dict(current_user_id=user_id))
 
     return note
 
+
 def update_note(note_id, current_user_id, data):
-    """Updates an existing note.
+    """Update an existing note, enforcing ownership and share-level permissions.
 
     Args:
         note_id: The ID of the note to update.
@@ -151,7 +134,6 @@ def update_note(note_id, current_user_id, data):
     """
     note = Note.query.get_or_404(note_id)
 
-    # Check if the user has permission to update the note.
     if note.user_id != current_user_id:
         shared_note = SharedNote.query.filter_by(note_id=note_id, user_id=current_user_id).first()
         if not shared_note:
@@ -162,34 +144,29 @@ def update_note(note_id, current_user_id, data):
         if not is_archive_only and shared_note.access_level != 'edit':
             raise PermissionError('Access denied - edit permission required')
 
-    # Update the note's fields.
     note.title = data.get('title', note.title)
     note.content = data.get('content', note.content)
     note.color = data.get('color', note.color)
     note.pinned = data.get('pinned', note.pinned)
     note.archived = data.get('archived', note.archived)
-    
-    # Update reminder fields if provided
+
     if 'reminder_datetime' in data:
         from datetime import datetime
         if data['reminder_datetime']:
-            # Parse ISO string as local time - frontend sends format like "2024-08-14T22:40:00"
             note.reminder_datetime = datetime.fromisoformat(data['reminder_datetime'])
         else:
             note.reminder_datetime = None
-    
+
     if 'reminder_completed' in data:
         note.reminder_completed = data.get('reminder_completed', note.reminder_completed)
-    
+
     if 'reminder_snoozed_until' in data:
         from datetime import datetime
         if data['reminder_snoozed_until']:
-            # Parse ISO string as local time
             note.reminder_snoozed_until = datetime.fromisoformat(data['reminder_snoozed_until'])
         else:
             note.reminder_snoozed_until = None
 
-    # If it's a checklist, update the checklist items.
     if note.note_type == 'checklist' and 'checklist_items' in data:
         ChecklistItem.query.filter_by(note_id=note_id).delete()
         for i, item_data in enumerate(data['checklist_items']):
@@ -202,7 +179,6 @@ def update_note(note_id, current_user_id, data):
             )
             db.session.add(item)
 
-    # If labels are provided, update the label associations.
     if 'label_ids' in data:
         from src.models.label import Label, NoteLabel
         NoteLabel.query.filter_by(note_id=note_id).delete()
@@ -215,14 +191,12 @@ def update_note(note_id, current_user_id, data):
 
     db.session.commit()
 
-    # Get the updated note as a dictionary.
     try:
         note_dict = note.to_dict(current_user_id=current_user_id)
     except Exception as e:
         print(f"Warning: Error getting note dict, using fallback: {e}")
         note_dict = note.to_dict()
 
-    # Notify connected clients about the update.
     try:
         broadcast_note_update(note_id, 'updated', note_dict)
     except Exception as e:
@@ -230,8 +204,9 @@ def update_note(note_id, current_user_id, data):
 
     return note
 
+
 def delete_note(note_id, current_user_id):
-    """Deletes a note.
+    """Delete a note, restricted to the owner only.
 
     Args:
         note_id: The ID of the note to delete.
@@ -242,7 +217,6 @@ def delete_note(note_id, current_user_id):
     """
     note = Note.query.get_or_404(note_id)
 
-    # Only the owner of the note can delete it.
     if note.user_id != current_user_id:
         shared_note = SharedNote.query.filter_by(note_id=note_id, user_id=current_user_id).first()
         if shared_note:
@@ -250,11 +224,17 @@ def delete_note(note_id, current_user_id):
         else:
             raise PermissionError('Access denied - only the owner can delete this note')
 
-    # Notify connected clients about the deletion.
-    try:
-        broadcast_note_update(note_id, 'deleted', {'id': note_id})
-    except Exception as e:
-        print(f"Warning: Error broadcasting deletion: {e}")
+    # Collect affected user IDs before deleting (relationships unavailable after commit).
+    from src.websocket_events import _get_shared_user_ids
+    affected_user_ids = _get_shared_user_ids(note_id)
 
     db.session.delete(note)
     db.session.commit()
+
+    try:
+        from src.websocket_events import socketio
+        payload = {'note_id': note_id, 'update_type': 'deleted', 'data': {'id': note_id}}
+        for uid in affected_user_ids:
+            socketio.emit('note_update_received', payload, room=f'user_{uid}')
+    except Exception as e:
+        print(f"Warning: Error broadcasting deletion: {e}")

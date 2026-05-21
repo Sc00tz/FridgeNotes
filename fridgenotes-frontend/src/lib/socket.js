@@ -1,4 +1,11 @@
-// FridgeNotes WebSocket Manager
+/**
+ * WebSocketManager
+ *
+ * Singleton wrapper around socket.io-client. Manages connection lifecycle,
+ * user/note room membership, event throttling, and batched room operations.
+ * Import the default export (`socketClient`) for normal use.
+ */
+
 import { io } from 'socket.io-client';
 
 class WebSocketManager {
@@ -9,34 +16,30 @@ class WebSocketManager {
     this.joinedNotes = new Set();
     this.eventListeners = new Map();
     this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 3; // OPTIMIZED: Reduced from 5 to limit reconnection storms
-    this.reconnectDelay = 2000;    // OPTIMIZED: Increased base delay
+    // Reduced from 5 to limit reconnection storms on flaky networks.
+    this.maxReconnectAttempts = 3;
+    this.reconnectDelay = 2000;
     this.reconnectTimeout = null;
 
-    // OPTIMIZATION: Add throttling for WebSocket events
-    this.eventThrottleMs = 100;    // Throttle events to max 10/second
+    // Throttle outgoing events to at most 10 per second per note+type key.
+    this.eventThrottleMs = 100;
     this.lastEventTime = new Map();
 
-    // OPTIMIZATION: Batch note room operations
+    // Batch join/leave room operations so rapid note opens don't flood the server.
     this.pendingRoomOperations = new Set();
     this.roomOperationTimeout = null;
 
-    // Get the base URL for the socket connection
-    // Use the current window location 
     const protocol = window.location.protocol;
     const host = window.location.hostname;
     const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
 
-    // Use the same protocol and port as the current page
     this.serverUrl = `${protocol}//${host}:${port}`;
-
   }
 
   connect(userId) {
     if (this.socket && this.isConnected) {
       this.disconnect();
     }
-
 
     try {
       this.socket = io(this.serverUrl, {
@@ -49,7 +52,7 @@ class WebSocketManager {
         reconnectionDelayMax: 5000,
         maxReconnectionAttempts: this.maxReconnectAttempts,
         upgrade: true,
-        rememberUpgrade: true
+        rememberUpgrade: true,
       });
 
       this.currentUserId = userId;
@@ -66,17 +69,17 @@ class WebSocketManager {
       return;
     }
 
-    // Connection event listeners
+    // Remove previously registered listeners to prevent duplicates on reconnect.
+    this.socket.removeAllListeners();
+
     this.socket.on('connect', () => {
       this.isConnected = true;
       this.reconnectAttempts = 0;
 
-      // Join the private user room
       if (this.currentUserId) {
         this.joinUser(this.currentUserId);
       }
 
-      // Rejoin all previously joined note rooms (for presence/editing)
       if (this.joinedNotes.size > 0) {
         this.joinedNotes.forEach(noteId => {
           this.joinNote(noteId);
@@ -84,19 +87,16 @@ class WebSocketManager {
       }
     });
 
-
     this.socket.on('disconnect', (reason) => {
       this.isConnected = false;
 
-      // Clear any existing reconnect timeout
       if (this.reconnectTimeout) {
         clearTimeout(this.reconnectTimeout);
         this.reconnectTimeout = null;
       }
 
-      // Don't clear joinedNotes here so we can rejoin on reconnect
       if (reason === 'io server disconnect') {
-        // Server initiated disconnect, try to reconnect manually
+        // Server-initiated disconnect — socket.io won't auto-reconnect, so we do it manually.
         this.reconnectTimeout = setTimeout(() => {
           if (!this.isConnected && this.currentUserId) {
             this.connect(this.currentUserId);
@@ -105,63 +105,40 @@ class WebSocketManager {
       }
     });
 
-    this.socket.on('connect_error', (error) => {
+    this.socket.on('connect_error', () => {
       this.isConnected = false;
       this.reconnectAttempts++;
-
-      if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      }
     });
 
-    this.socket.on('reconnect', (attemptNumber) => {
+    this.socket.on('reconnect', () => {
       this.reconnectAttempts = 0;
     });
 
-    this.socket.on('reconnect_error', (error) => {
-    });
-
-    this.socket.on('reconnect_failed', () => {
-    });
-
-    // Note-specific event listeners
-    this.socket.on('joined_note', (data) => {
-    });
-
-    this.socket.on('left_note', (data) => {
-    });
-
-    this.socket.on('user_joined', (data) => {
-    });
-
-    this.socket.on('user_left', (data) => {
-    });
-
-    this.socket.on('error', (error) => {
-    });
-
-    this.socket.on('ping', () => {
-    });
-
-    this.socket.on('pong', (latency) => {
-    });
+    this.socket.on('reconnect_error', () => {});
+    this.socket.on('reconnect_failed', () => {});
+    this.socket.on('joined_note', () => {});
+    this.socket.on('left_note', () => {});
+    this.socket.on('user_joined', () => {});
+    this.socket.on('user_left', () => {});
+    this.socket.on('error', () => {});
+    this.socket.on('ping', () => {});
+    this.socket.on('pong', () => {});
   }
 
   disconnect() {
     if (this.socket) {
-
-      // Clear any pending reconnect timeout
       if (this.reconnectTimeout) {
         clearTimeout(this.reconnectTimeout);
         this.reconnectTimeout = null;
       }
 
-      // Leave all joined notes first
-      this.joinedNotes.forEach(noteId => {
-        this.leaveNote(noteId);
-      });
+      if (this.roomOperationTimeout) {
+        clearTimeout(this.roomOperationTimeout);
+        this.roomOperationTimeout = null;
+      }
+      this.pendingRoomOperations.clear();
 
       this.socket.disconnect();
-      socketClient.disconnect();
       this.socket = null;
       this.isConnected = false;
       this.joinedNotes.clear();
@@ -176,24 +153,20 @@ class WebSocketManager {
       return;
     }
 
-    this.socket.emit('join_user', {
-      user_id: userId
-    });
+    this.socket.emit('join_user', { user_id: userId });
   }
 
   joinNote(noteId) {
-
     if (!noteId) {
       return;
     }
 
-    // OPTIMIZATION: Batch room operations to reduce WebSocket overhead
     this.pendingRoomOperations.add({ type: 'join', noteId });
     this._processPendingRoomOperations();
   }
 
   _processPendingRoomOperations() {
-    // OPTIMIZATION: Debounce room operations to batch multiple joins/leaves
+    // Debounce so a burst of join/leave calls is collapsed into one batch.
     if (this.roomOperationTimeout) {
       clearTimeout(this.roomOperationTimeout);
     }
@@ -203,7 +176,6 @@ class WebSocketManager {
         return;
       }
 
-      // Process all pending operations in batch
       const operations = Array.from(this.pendingRoomOperations);
       this.pendingRoomOperations.clear();
 
@@ -211,18 +183,18 @@ class WebSocketManager {
         if (op.type === 'join' && !this.joinedNotes.has(op.noteId)) {
           this.socket.emit('join_note', {
             note_id: op.noteId,
-            user_id: this.currentUserId
+            user_id: this.currentUserId,
           });
           this.joinedNotes.add(op.noteId);
         } else if (op.type === 'leave' && this.joinedNotes.has(op.noteId)) {
           this.socket.emit('leave_note', {
             note_id: op.noteId,
-            user_id: this.currentUserId
+            user_id: this.currentUserId,
           });
           this.joinedNotes.delete(op.noteId);
         }
       });
-    }, 50); // 50ms debounce for room operations
+    }, 50);
   }
 
   leaveNote(noteId) {
@@ -230,41 +202,45 @@ class WebSocketManager {
       return;
     }
 
-    // OPTIMIZATION: Batch room operations to reduce WebSocket overhead
     this.pendingRoomOperations.add({ type: 'leave', noteId });
     this._processPendingRoomOperations();
   }
 
-  // OPTIMIZATION: Add event throttling
   _shouldThrottleEvent(eventKey) {
     const now = Date.now();
     const lastTime = this.lastEventTime.get(eventKey) || 0;
 
     if (now - lastTime < this.eventThrottleMs) {
-      return true; // Should throttle
+      return true;
+    }
+
+    // Evict stale entries to keep the map bounded.
+    if (this.lastEventTime.size > 500) {
+      const cutoff = now - 60000;
+      for (const [key, time] of this.lastEventTime) {
+        if (time < cutoff) this.lastEventTime.delete(key);
+      }
     }
 
     this.lastEventTime.set(eventKey, now);
-    return false; // Don't throttle
+    return false;
   }
 
-  // Emit events
   emitNoteUpdate(noteId, updateType, data) {
     if (!this.socket || !this.isConnected || !this.currentUserId) {
       return;
     }
 
-    // OPTIMIZATION: Throttle note update events to prevent flooding
     const eventKey = `note_update_${noteId}_${updateType}`;
     if (this._shouldThrottleEvent(eventKey)) {
-      return; // Skip this event due to throttling
+      return;
     }
 
     this.socket.emit('note_updated', {
       note_id: noteId,
       user_id: this.currentUserId,
       update_type: updateType,
-      data: data
+      data: data,
     });
   }
 
@@ -274,9 +250,8 @@ class WebSocketManager {
         note_id: noteId,
         item_id: itemId,
         completed: completed,
-        user_id: this.currentUserId
+        user_id: this.currentUserId,
       });
-    } else {
     }
   }
 
@@ -285,24 +260,20 @@ class WebSocketManager {
       this.socket.emit('note_shared', {
         note_id: noteId,
         shared_with_user_id: sharedWithUserId,
-        access_level: accessLevel
+        access_level: accessLevel,
       });
-    } else {
     }
   }
 
   emitNotesReordered(userId, noteIds) {
     if (this.socket && this.isConnected && this.currentUserId) {
-      const payload = {
+      this.socket.emit('notes_reordered', {
         user_id: userId,
-        note_ids: noteIds
-      };
-      this.socket.emit('notes_reordered', payload);
-    } else {
+        note_ids: noteIds,
+      });
     }
   }
 
-  // Event listeners for incoming events
   onNoteUpdate(callback) {
     if (!callback || typeof callback !== 'function') {
       return;
@@ -311,7 +282,6 @@ class WebSocketManager {
     if (this.socket) {
       this.socket.on('note_update_received', callback);
       this.eventListeners.set('note_update_received', callback);
-    } else {
     }
   }
 
@@ -323,7 +293,6 @@ class WebSocketManager {
     if (this.socket) {
       this.socket.on('checklist_item_toggle_received', callback);
       this.eventListeners.set('checklist_item_toggle_received', callback);
-    } else {
     }
   }
 
@@ -335,7 +304,6 @@ class WebSocketManager {
     if (this.socket) {
       this.socket.on('note_share_received', callback);
       this.eventListeners.set('note_share_received', callback);
-    } else {
     }
   }
 
@@ -347,7 +315,6 @@ class WebSocketManager {
     if (this.socket) {
       this.socket.on('notes_reorder_received', callback);
       this.eventListeners.set('notes_reorder_received', callback);
-    } else {
     }
   }
 
@@ -373,7 +340,6 @@ class WebSocketManager {
     }
   }
 
-  // Remove event listeners
   offNoteUpdate(callback) {
     if (this.socket && callback) {
       this.socket.off('note_update_received', callback);
@@ -416,7 +382,6 @@ class WebSocketManager {
     }
   }
 
-  // Utility methods
   isSocketConnected() {
     return this.socket && this.socket.connected && this.isConnected;
   }
@@ -429,7 +394,6 @@ class WebSocketManager {
     return Array.from(this.joinedNotes);
   }
 
-  // Utility methods
   getConnectionInfo() {
     return {
       isConnected: this.isConnected,
@@ -438,15 +402,12 @@ class WebSocketManager {
       joinedNotes: this.getJoinedNotes(),
       serverUrl: this.serverUrl,
       reconnectAttempts: this.reconnectAttempts,
-      eventListeners: Array.from(this.eventListeners.keys())
+      eventListeners: Array.from(this.eventListeners.keys()),
     };
   }
 
-  // Test connection method
   testConnection() {
     if (this.socket && this.isConnected) {
-
-      // Send a test ping
       this.socket.emit('ping', { timestamp: Date.now(), test: true });
       return true;
     } else {
@@ -454,7 +415,6 @@ class WebSocketManager {
     }
   }
 
-  // Force reconnection
   forceReconnect() {
     if (this.socket) {
       this.socket.disconnect();
@@ -467,20 +427,13 @@ class WebSocketManager {
     }, 1000);
   }
 
-  // Health check
   healthCheck() {
-    const info = this.getConnectionInfo();
-    const isHealthy = this.isSocketConnected() && this.currentUserId;
-
-    return isHealthy;
+    return this.isSocketConnected() && !!this.currentUserId;
   }
 }
 
-// Create and export a singleton instance
 const socketClient = new WebSocketManager();
-
 
 export default socketClient;
 
-// Also export the class for testing or multiple instances
 export { WebSocketManager };

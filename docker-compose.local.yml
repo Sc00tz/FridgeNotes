@@ -1,0 +1,10 @@
+services:
+  fridgenotes:
+    image: ghcr.io/sc00tz/fridgenotes:latest
+    ports:
+      - "5009:5009"
+    volumes:
+      - ./data:/app/src/database
+    env_file:
+      - .env
+    restart: unless-stopped

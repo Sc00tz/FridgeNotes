@@ -184,7 +184,12 @@ export const useNotes = (currentUser, isAuthenticated) => {
 
       if (result.success) {
         const newNote = result.result;
-        setNotes(prevNotes => [newNote, ...prevNotes]);
+        // The backend also broadcasts a WS 'created' event to all users including
+        // the creator, so the note may already be in state by the time this runs.
+        setNotes(prevNotes => {
+          if (prevNotes.some(n => n.id === newNote.id)) return prevNotes;
+          return [newNote, ...prevNotes];
+        });
         return newNote;
       } else if (result.queued) {
         const optimisticNote = {

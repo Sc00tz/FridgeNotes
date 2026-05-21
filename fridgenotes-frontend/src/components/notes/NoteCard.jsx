@@ -90,14 +90,15 @@ const NoteCard = ({
     const updatedNote = { ...editedNote, checklist_items: updatedItems };
     setEditedNote(updatedNote);
 
-    // Call parent update function only if it exists and is a function
+    // Temp IDs mean the note hasn't been saved yet — no API call, just keep local state.
+    if (String(itemId).startsWith('temp_')) {
+      return;
+    }
+
     if (onChecklistItemUpdate && typeof onChecklistItemUpdate === 'function') {
       onChecklistItemUpdate(itemId, { completed });
-    } else {
-      // Fallback: use the regular onUpdate function
-      if (onUpdate && typeof onUpdate === 'function') {
-        onUpdate(updatedNote);
-      }
+    } else if (onUpdate && typeof onUpdate === 'function') {
+      onUpdate(updatedNote);
     }
   };
 

@@ -3,10 +3,12 @@
 from flask import Blueprint, jsonify, request
 from flask_login import login_user, logout_user, login_required, current_user
 from src.models.user import User, db
+from src.limiter import limiter
 
 auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/register', methods=['POST'])
+@limiter.limit('10 per hour')
 def register():
     """Register a new user and log them in automatically."""
     data = request.json
@@ -14,14 +16,12 @@ def register():
     if not data.get('username') or not data.get('email') or not data.get('password'):
         return jsonify({'error': 'Username, email, and password are required'}), 400
 
-    if len(data['password']) < 6:
-        return jsonify({'error': 'Password must be at least 6 characters long'}), 400
+    if len(data['password']) < 8:
+        return jsonify({'error': 'Password must be at least 8 characters long'}), 400
 
-    if User.get_by_username(data['username']):
-        return jsonify({'error': 'Username already exists'}), 409
-
-    if User.get_by_email(data['email']):
-        return jsonify({'error': 'Email already exists'}), 409
+    # Generic message to prevent username/email enumeration
+    if User.get_by_username(data['username']) or User.get_by_email(data['email']):
+        return jsonify({'error': 'Username or email already in use'}), 409
 
     try:
         user = User(
@@ -46,6 +46,7 @@ def register():
 
 
 @auth_bp.route('/login', methods=['POST'])
+@limiter.limit('20 per minute;100 per hour')
 def login():
     """Authenticate a user by username or email and start a session."""
     data = request.json

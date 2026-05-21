@@ -25,6 +25,7 @@ from src.models.note import Note, ChecklistItem, SharedNote
 # Import label models
 from src.models.label import Label, NoteLabel
 
+from src.limiter import limiter
 from src.routes.user import user_bp
 from src.routes.note import note_bp
 from src.routes.auth import auth_bp
@@ -40,9 +41,19 @@ def log_with_flush(message):
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
 
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_secret_key')
+_secret_key = os.environ.get('SECRET_KEY')
+_is_production = os.environ.get('FLASK_ENV') == 'production'
+if not _secret_key:
+    if _is_production:
+        raise RuntimeError('SECRET_KEY environment variable must be set in production')
+    _secret_key = 'dev_secret_key_not_for_production'
+app.config['SECRET_KEY'] = _secret_key
 
-CORS(app, supports_credentials=True)
+# Restrict CORS to the configured origin; fall back to same-origin only.
+_allowed_origin = os.environ.get('ALLOWED_ORIGIN', '')
+CORS(app, supports_credentials=True, origins=[_allowed_origin] if _allowed_origin else [])
+
+limiter.init_app(app)
 
 
 @app.after_request
@@ -72,7 +83,7 @@ def load_user(user_id):
 
 
 try:
-    socketio.init_app(app, cors_allowed_origins="*")
+    socketio.init_app(app, cors_allowed_origins=[_allowed_origin] if _allowed_origin else [])
     log_with_flush("✅ SocketIO initialized successfully")
 except Exception as e:
     log_with_flush(f"⚠️ SocketIO initialization failed: {e}")
@@ -87,7 +98,11 @@ register_error_handlers(app)
 
 @app.route('/debug/pwa')
 def debug_pwa():
-    """Return debug information about PWA file availability."""
+    """Return debug information about PWA file availability (admin only)."""
+    from flask_login import current_user
+    if not current_user.is_authenticated or not current_user.is_admin:
+        from flask import abort
+        abort(403)
     import json
     debug_info = {
         'static_folder': app.static_folder,
@@ -113,7 +128,7 @@ def debug_pwa():
 app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'database', 'app.db')}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
+app.config['SESSION_COOKIE_SECURE'] = _is_production
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours

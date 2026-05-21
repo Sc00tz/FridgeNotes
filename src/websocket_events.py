@@ -8,6 +8,7 @@ Room-based communication uses one room per user plus per-note rooms for presence
 
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask import request
+from flask_login import current_user
 
 
 def _get_shared_user_ids(note_id):
@@ -31,10 +32,19 @@ socketio = SocketIO(cors_allowed_origins="*")
 active_connections = {}
 
 
+def _authenticated_user_id():
+    """Return the current user's ID from the session, or None if not authenticated."""
+    if current_user and current_user.is_authenticated:
+        return current_user.id
+    return None
+
+
 @socketio.on('connect')
 def handle_connect():
-    """Handle new WebSocket connection and initialize connection tracking."""
-    active_connections[request.sid] = {'user_id': None, 'notes': set()}
+    """Reject unauthenticated WebSocket connections and initialize connection tracking."""
+    if not current_user.is_authenticated:
+        return False  # Reject the connection
+    active_connections[request.sid] = {'user_id': current_user.id, 'notes': set()}
 
 
 @socketio.on('disconnect')
@@ -48,8 +58,8 @@ def handle_disconnect():
 
 @socketio.on('join_user')
 def handle_join_user(data):
-    """Join a user-specific room for general updates."""
-    user_id = data.get('user_id')
+    """Join the authenticated user's private room for general updates."""
+    user_id = _authenticated_user_id()
     if not user_id:
         return
 
@@ -57,21 +67,23 @@ def handle_join_user(data):
         active_connections[request.sid]['user_id'] = user_id
 
     join_room(f'user_{user_id}')
-    emit('joined_user', {'user_id': user_id, 'message': f'Connected to user {user_id} room'})
+    emit('joined_user', {'user_id': user_id})
 
 
 @socketio.on('join_note')
 def handle_join_note(data):
     """Join a note room for real-time presence and editing updates."""
+    user_id = _authenticated_user_id()
+    if not user_id:
+        return
+
     note_id = data['note_id']
-    user_id = data['user_id']
 
     if request.sid in active_connections:
-        active_connections[request.sid]['user_id'] = user_id
         active_connections[request.sid]['notes'].add(note_id)
 
     join_room(f'note_{note_id}')
-    emit('joined_note', {'note_id': note_id, 'message': f'Joined note {note_id}'})
+    emit('joined_note', {'note_id': note_id})
     emit('user_joined', {'user_id': user_id, 'note_id': note_id},
          room=f'note_{note_id}', include_self=False)
 
@@ -79,23 +91,27 @@ def handle_join_note(data):
 @socketio.on('leave_note')
 def handle_leave_note(data):
     """Leave a note room and notify other participants."""
+    user_id = _authenticated_user_id()
     note_id = data['note_id']
-    user_id = data['user_id']
 
     if request.sid in active_connections:
         active_connections[request.sid]['notes'].discard(note_id)
 
     leave_room(f'note_{note_id}')
-    emit('left_note', {'note_id': note_id, 'message': f'Left note {note_id}'})
-    emit('user_left', {'user_id': user_id, 'note_id': note_id},
-         room=f'note_{note_id}', include_self=False)
+    emit('left_note', {'note_id': note_id})
+    if user_id:
+        emit('user_left', {'user_id': user_id, 'note_id': note_id},
+             room=f'note_{note_id}', include_self=False)
 
 
 @socketio.on('note_updated')
 def handle_note_updated(data):
     """Fan out note content updates to all users with access, skipping the sender."""
+    user_id = _authenticated_user_id()
+    if not user_id:
+        return
+
     note_id = data['note_id']
-    user_id = data['user_id']
     update_type = data.get('update_type', 'content')
 
     payload = {
@@ -112,10 +128,13 @@ def handle_note_updated(data):
 @socketio.on('checklist_item_toggled')
 def handle_checklist_item_toggled(data):
     """Fan out checklist item toggles to all users with access, skipping the sender."""
+    user_id = _authenticated_user_id()
+    if not user_id:
+        return
+
     note_id = data['note_id']
     item_id = data['item_id']
     completed = data['completed']
-    user_id = data['user_id']
 
     payload = {
         'note_id': note_id,
@@ -145,7 +164,7 @@ def handle_note_shared(data):
 @socketio.on('notes_reordered')
 def handle_notes_reordered(data):
     """Broadcast note reorder events to all other clients of the same user."""
-    user_id = data.get('user_id')
+    user_id = _authenticated_user_id()
     note_ids = data.get('note_ids')
 
     if not user_id or not note_ids:

@@ -13,7 +13,9 @@ note_bp = Blueprint('note', __name__)
 @note_bp.route('/debug/auth', methods=['GET'])
 @login_required
 def debug_auth():
-    """Return the current user's authentication status."""
+    """Return the current user's authentication status (admin only)."""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
     return jsonify({
         'authenticated': True,
         'user_id': current_user.id,
@@ -21,38 +23,35 @@ def debug_auth():
         'is_admin': current_user.is_admin
     })
 
+
 @note_bp.route('/debug/schema', methods=['GET'])
 @login_required
 def debug_schema():
-    """Return the current database schema and migration history."""
+    """Return the current database schema and migration history (admin only)."""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
     try:
         from sqlalchemy import text
         from flask import current_app
-        
+
         result = db.session.execute(text("PRAGMA table_info(shared_notes)"))
         columns = [{'name': row[1], 'type': row[2], 'nullable': not row[3]} for row in result.fetchall()]
-        
+
         result = db.session.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
         all_tables = [row[0] for row in result.fetchall()]
-        
+
         has_migration_table = 'migration_history' in all_tables
-        
+
         migration_history = []
         if has_migration_table:
             result = db.session.execute(text("SELECT * FROM migration_history ORDER BY applied_at"))
             migration_history = [{'id': row[0], 'name': row[1], 'applied_at': row[2]} for row in result.fetchall()]
-        
-        duplicate_tables = []
-        for table in all_tables:
-            if table.endswith('s') and table[:-1] in all_tables:
-                duplicate_tables.append({'old': table[:-1], 'new': table})
-        
+
         return jsonify({
             'shared_notes_columns': columns,
             'all_tables': all_tables,
             'has_migration_table': has_migration_table,
             'migration_history': migration_history,
-            'duplicate_tables': duplicate_tables,
             'database_path': current_app.config.get('SQLALCHEMY_DATABASE_URI', 'Not set')
         })
     except Exception as e:

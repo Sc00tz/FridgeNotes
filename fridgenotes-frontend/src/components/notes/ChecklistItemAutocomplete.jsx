@@ -19,9 +19,9 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Input } from './ui/input';
-import { Button } from './ui/button';
-import { Card } from './ui/card';
+import { Input } from '../ui/input';
+import { Button } from '../ui/button';
+import { Card } from '../ui/card';
 import { Check } from 'lucide-react';
 
 // Common shopping/grocery items database with categories

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Palette, Check } from 'lucide-react';
-import { NOTE_COLORS, COLOR_PICKER_GRID, getColorConfig } from '../utils/colors';
+import { NOTE_COLORS, COLOR_PICKER_GRID, getColorConfig } from '../../utils/colors';
 
 const ColorPicker = ({ currentColor = 'default', onColorChange, disabled = false }) => {
   const [isOpen, setIsOpen] = useState(false);

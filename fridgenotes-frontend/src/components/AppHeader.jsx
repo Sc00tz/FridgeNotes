@@ -20,7 +20,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import ThemeToggle from './ThemeToggle';
+import ThemeToggle from './ui/ThemeToggle';
 
 const AppHeader = ({ 
   searchTerm, 

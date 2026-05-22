@@ -12,13 +12,9 @@ const ReminderPicker = ({ reminder, onReminderChange, className = '' }) => {
   // Parse existing reminder when component mounts or reminder prop changes
   useEffect(() => {
     if (reminder) {
-      // Handle the datetime string properly to avoid timezone conversion
-      console.log('FRONTEND DEBUG - Received reminder from backend:', reminder);
       const reminderDate = new Date(reminder);
-      console.log('FRONTEND DEBUG - Parsed Date object:', reminderDate);
       const isoDate = reminderDate.toISOString().split('T')[0];
       const timeStr = reminderDate.toTimeString().slice(0, 5);
-      console.log('FRONTEND DEBUG - Setting localDate/localTime:', { isoDate, timeStr });
       setLocalDate(isoDate);
       setLocalTime(timeStr);
     } else {
@@ -29,11 +25,7 @@ const ReminderPicker = ({ reminder, onReminderChange, className = '' }) => {
 
   const handleDateTimeChange = () => {
     if (localDate && localTime) {
-      // Create datetime string without timezone info to be treated as local time
-      // This way 10:40 PM local stays as 10:40 PM in the database
       const datetimeString = `${localDate}T${localTime}:00`;
-      console.log('FRONTEND DEBUG - Input values:', { localDate, localTime });
-      console.log('FRONTEND DEBUG - Sending datetime string:', datetimeString);
       onReminderChange(datetimeString);
     } else {
       onReminderChange(null);
@@ -115,17 +107,17 @@ const ReminderPicker = ({ reminder, onReminderChange, className = '' }) => {
 
       {/* Date/Time Picker Modal */}
       {isOpen && (
-        <div className="absolute top-full left-0 z-50 mt-2 p-4 bg-white border rounded-lg shadow-lg min-w-[280px]">
+        <div className="absolute top-full left-0 z-50 mt-2 p-4 bg-popover text-popover-foreground border rounded-lg shadow-lg min-w-[280px]">
           <div className="space-y-4">
-            <h3 className="font-medium text-gray-900">Set Reminder</h3>
+            <h3 className="font-medium">Set Reminder</h3>
 
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-muted-foreground mb-1">
                   Date
                 </label>
                 <div className="relative">
-                  <Calendar size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <Calendar size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
                   <Input
                     type="date"
                     value={localDate}
@@ -136,11 +128,11 @@ const ReminderPicker = ({ reminder, onReminderChange, className = '' }) => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-muted-foreground mb-1">
                   Time
                 </label>
                 <div className="relative">
-                  <Clock size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <Clock size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
                   <Input
                     type="time"
                     value={localTime}
@@ -153,7 +145,7 @@ const ReminderPicker = ({ reminder, onReminderChange, className = '' }) => {
 
             {/* Quick presets */}
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-muted-foreground">
                 Quick Options
               </label>
               <div className="grid grid-cols-2 gap-2">

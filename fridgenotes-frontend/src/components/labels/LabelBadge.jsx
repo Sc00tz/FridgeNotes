@@ -29,35 +29,42 @@ const LabelBadge = ({
     }
   };
   
+  const labelColor = label.color || '#3b82f6';
+
   return (
     <div
       className={`
-        label-badge inline-flex items-center gap-1 rounded-full border-2 bg-white
+        label-badge inline-flex items-center gap-1 rounded-full border
         transition-all duration-150 select-none
         ${sizeClasses[size]}
         ${isClickable ? 'clickable cursor-pointer hover:shadow-sm hover:scale-105' : ''}
         ${isHovered ? 'shadow-sm' : ''}
       `}
       style={{
-        borderColor: label.color || '#3b82f6',
-        color: '#374151' // Neutral text color
+        // Tint the badge with the label color: a translucent fill plus the
+        // label color for the border/text. Readable on both light and dark
+        // note backgrounds (the previous white bg + gray text was invisible
+        // against dark cards).
+        backgroundColor: `${labelColor}26`, // ~15% opacity
+        borderColor: labelColor,
+        color: labelColor,
       }}
       onClick={handleClick}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       title={`${label.full_name || label.display_name || label.name}${isClickable ? ' (click to filter)' : ''}`}
     >
-      <span className="truncate max-w-[120px]">
+      <span className="truncate max-w-[120px] font-medium">
         {label.display_name || label.name}
       </span>
-      
+
       {onRemove && (
         <button
           onClick={handleRemove}
-          className="ml-1 hover:bg-gray-100 rounded-full p-0.5 transition-colors"
+          className="ml-1 hover:bg-black/10 dark:hover:bg-white/10 rounded-full p-0.5 transition-colors"
           title="Remove label"
         >
-          <X size={12} className="text-gray-500 hover:text-gray-700" />
+          <X size={12} style={{ color: labelColor }} />
         </button>
       )}
     </div>

@@ -140,7 +140,7 @@ const LabelManagement = ({
         <div className="space-y-6">
           {/* Create/Edit Form */}
           {(isCreating || editingLabel) && (
-            <div className="bg-gray-50 p-4 rounded-lg border">
+            <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
               <h3 className="font-semibold mb-4 flex items-center gap-2">
                 {editingLabel ? (
                   <><Edit2 className="h-4 w-4" /> Edit Label</>
@@ -273,7 +273,7 @@ const LabelManagement = ({
                 {/* Root level labels */}
                 {(labelsByParent.root || []).map((label) => (
                   <div key={label.id} className="space-y-2">
-                    <div className="flex items-center justify-between p-3 bg-white border rounded-lg hover:bg-gray-50">
+                    <div className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
                       <div className="flex items-center gap-3">
                         <LabelBadge label={label} size="md" />
                         <span className="text-sm text-gray-500">({label.children?.length || 0} children)</span>
@@ -299,7 +299,7 @@ const LabelManagement = ({
 
                     {/* Child labels */}
                     {(labelsByParent[label.id] || []).map((childLabel) => (
-                      <div key={childLabel.id} className="ml-6 flex items-center justify-between p-2 bg-gray-50 border rounded hover:bg-gray-100">
+                      <div key={childLabel.id} className="ml-6 flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded hover:bg-gray-100 dark:hover:bg-gray-700">
                         <LabelBadge label={childLabel} size="sm" />
                         <div className="flex items-center gap-1">
                           <Button

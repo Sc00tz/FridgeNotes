@@ -19,7 +19,8 @@ import {
   Pin,
   PinOff,
   EyeOff,
-  Eye
+  Eye,
+  MapPin
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -34,6 +35,8 @@ import LabelBadges from '../labels/LabelBadges';
 import LabelPicker from '../labels/LabelPicker';
 import ReminderPicker from '../reminders/ReminderPicker';
 import ReminderBadge from '../reminders/ReminderBadge';
+import LocationPicker from '../reminders/LocationPicker';
+import AttachmentList from './AttachmentList';
 import ChecklistItemAutocomplete from './ChecklistItemAutocomplete';
 import './NoteCard.css';
 
@@ -80,6 +83,14 @@ const NoteCard = ({
       reminder_completed: false, // Reset completion when reminder is changed
       reminder_snoozed_until: null // Clear any snooze when reminder is changed
     });
+  };
+
+  const handleLocationChange = (locationFields) => {
+    // Persist immediately (like color) so the location reminder is saved even
+    // if the user doesn't hit the note's Save button.
+    const updatedNote = { ...editedNote, ...locationFields };
+    setEditedNote(updatedNote);
+    onUpdate(updatedNote);
   };
 
   const handleChecklistItemToggle = (itemId, completed) => {
@@ -453,20 +464,41 @@ const NoteCard = ({
           </div>
         )}
 
+        {/* Attachments - images and voice memos (shown in view and edit) */}
+        <AttachmentList
+          noteId={note.id}
+          attachments={note.attachments || []}
+          isEditing={isEditing}
+        />
+
         {/* Reminder - Show ReminderPicker when editing, ReminderBadge when viewing */}
         {isEditing ? (
-          <div className="reminder-container mt-3">
+          <div className="reminder-container mt-3 space-y-2">
             <ReminderPicker
               reminder={editedNote.reminder_datetime}
               onReminderChange={handleReminderChange}
             />
+            <LocationPicker
+              note={editedNote}
+              onLocationChange={handleLocationChange}
+            />
           </div>
         ) : (
-          <div className="reminder-container mt-3">
+          <div className="reminder-container mt-3 space-y-2">
             <ReminderBadge
               reminder={note.reminder_datetime}
               completed={note.reminder_completed}
             />
+            {note.reminder_latitude != null && (
+              <div className="flex items-center gap-2 p-2 rounded-md border border-green-300 bg-green-100 text-green-800 dark:border-green-700 dark:bg-green-900/40 dark:text-green-300 text-sm">
+                <MapPin size={16} />
+                <span className="font-medium">
+                  {note.reminder_location_name ||
+                    `${note.reminder_latitude.toFixed(4)}, ${note.reminder_longitude.toFixed(4)}`}
+                  {note.reminder_radius ? ` · ${note.reminder_radius}m` : ''}
+                </span>
+              </div>
+            )}
           </div>
         )}
 

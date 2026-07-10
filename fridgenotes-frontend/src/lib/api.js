@@ -35,8 +35,12 @@ class APIClient {
       ...options,
     };
 
-    // Convert body to JSON string if it's an object
-    if (config.body && typeof config.body === 'object' && !(config.body instanceof FormData)) {
+    // For multipart uploads, let the browser set Content-Type (with the
+    // boundary); a forced application/json header would corrupt the request.
+    if (config.body instanceof FormData) {
+      delete config.headers['Content-Type'];
+    } else if (config.body && typeof config.body === 'object') {
+      // Convert plain-object bodies to JSON.
       config.body = JSON.stringify(config.body);
     }
 
@@ -192,6 +196,63 @@ class APIClient {
   async getChanges(since) {
     const qs = since ? `?since=${encodeURIComponent(since)}` : '';
     return this.makeRequest(`/sync${qs}`);
+  }
+
+  /**
+   * List attachments for a note.
+   * @param {number|string} noteId
+   * @returns {Promise<Array>} attachment metadata
+   */
+  async listAttachments(noteId) {
+    if (!noteId) throw new Error('Note ID is required');
+    return this.makeRequest(`/notes/${noteId}/attachments`);
+  }
+
+  /**
+   * Upload a file attachment to a note.
+   * @param {number|string} noteId
+   * @param {File|Blob} file - the file to upload
+   * @param {string} [filename] - name to send (required when file is a Blob)
+   * @returns {Promise<Object>} created attachment metadata
+   */
+  async uploadAttachment(noteId, file, filename) {
+    if (!noteId) throw new Error('Note ID is required');
+    if (!file) throw new Error('File is required');
+    const form = new FormData();
+    form.append('file', file, filename || file.name);
+    return this.makeRequest(`/notes/${noteId}/attachments`, {
+      method: 'POST',
+      body: form,
+    });
+  }
+
+  /**
+   * Delete an attachment.
+   * @param {number|string} noteId
+   * @param {number|string} attachmentId
+   */
+  async deleteAttachment(noteId, attachmentId) {
+    if (!noteId || !attachmentId) throw new Error('Note ID and attachment ID are required');
+    return this.makeRequest(`/notes/${noteId}/attachments/${attachmentId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Fetch an attachment's binary as an object URL for display/playback.
+   * The caller is responsible for revoking the URL when done.
+   * @param {number|string} noteId
+   * @param {number|string} attachmentId
+   * @returns {Promise<string>} object URL
+   */
+  async fetchAttachmentBlobUrl(noteId, attachmentId) {
+    const url = `${this.baseURL}/notes/${noteId}/attachments/${attachmentId}`;
+    const response = await fetch(url, { credentials: 'include' });
+    if (!response.ok) {
+      throw new Error(`Failed to load attachment (${response.status})`);
+    }
+    const blob = await response.blob();
+    return URL.createObjectURL(blob);
   }
 
   /**

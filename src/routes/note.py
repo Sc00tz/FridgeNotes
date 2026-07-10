@@ -9,11 +9,34 @@ from src.models.user import User
 from src.services.note_service import get_notes_for_user, create_note, update_note, delete_note, get_changes_for_user
 from src.websocket_events import broadcast_note_update, broadcast_checklist_toggle, broadcast_notes_reorder
 from src.datetime_utils import parse_iso_datetime, InvalidInput
+from src.limiter import limiter
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 note_bp = Blueprint('note', __name__)
+
+
+@note_bp.route('/geocode', methods=['GET'])
+@login_required
+@limiter.limit('30 per minute;1 per second')
+def geocode_address():
+    """Look up an address or business name -> coordinates (for location reminders).
+
+    Proxies OpenStreetMap Nominatim server-side (auth-only, rate-limited to
+    respect its usage policy). Query param `q`. Returns a list of
+    {name, latitude, longitude}.
+    """
+    from src.geocoding import geocode
+    query = request.args.get('q', '')
+    try:
+        results = geocode(query)
+    except InvalidInput:
+        raise  # -> 400 via the registered handler
+    except RuntimeError as e:
+        logger.warning("Geocoding failed: %s", e)
+        return jsonify({'error': 'Location search is temporarily unavailable'}), 503
+    return jsonify(results)
 
 @note_bp.route('/debug/auth', methods=['GET'])
 @login_required

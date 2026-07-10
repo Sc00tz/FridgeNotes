@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, X, Crosshair, Loader2 } from 'lucide-react';
+import { MapPin, X, Crosshair, Loader2, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import apiClient from '../../lib/api';
 
 /**
  * Sets a location-based reminder on a note: latitude, longitude, radius (m),
@@ -22,8 +23,37 @@ const LocationPicker = ({ note, onLocationChange, className = '' }) => {
   const [name, setName] = useState('');
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
 
   const hasLocation = note?.reminder_latitude != null && note?.reminder_longitude != null;
+
+  const runSearch = async () => {
+    const q = searchQuery.trim();
+    if (!q) return;
+    setError(null);
+    setSearching(true);
+    setSearchResults([]);
+    try {
+      const results = await apiClient.geocode(q);
+      if (!results.length) setError('No matching places found');
+      setSearchResults(results);
+    } catch (e) {
+      setError(e.message || 'Location search failed');
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const pickResult = (r) => {
+    setLat(r.latitude.toFixed(6));
+    setLng(r.longitude.toFixed(6));
+    // Use a short label: first segment of the display name (e.g. business or street).
+    if (!name) setName((r.name || '').split(',')[0]);
+    setSearchResults([]);
+    setSearchQuery('');
+  };
 
   // Seed local fields from the note when it changes.
   useEffect(() => {
@@ -126,6 +156,43 @@ const LocationPicker = ({ note, onLocationChange, className = '' }) => {
         <div className="absolute top-full left-0 z-50 mt-2 p-4 bg-popover text-popover-foreground border rounded-lg shadow-lg min-w-[280px]">
           <div className="space-y-3">
             <h3 className="font-medium">Location Reminder</h3>
+
+            {/* Address / business search */}
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">
+                Search address or place
+              </label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runSearch(); } }}
+                    placeholder="e.g. Safeway, 123 Main St"
+                    className="pl-7"
+                  />
+                </div>
+                <Button variant="outline" size="sm" onClick={runSearch} disabled={searching}>
+                  {searching ? <Loader2 size={16} className="animate-spin" /> : 'Search'}
+                </Button>
+              </div>
+              {searchResults.length > 0 && (
+                <ul className="mt-2 max-h-40 overflow-y-auto border rounded-md divide-y">
+                  {searchResults.map((r, i) => (
+                    <li key={i}>
+                      <button
+                        type="button"
+                        onClick={() => pickResult(r)}
+                        className="w-full text-left px-2 py-1.5 text-xs hover:bg-muted/60"
+                      >
+                        {r.name}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
 
             <Button
               variant="outline"

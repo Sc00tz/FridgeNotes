@@ -59,6 +59,10 @@ ENV FLASK_ENV=production
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONIOENCODING=UTF-8
+# Use the system DNS resolver instead of eventlet's green resolver, which can
+# time out under the gunicorn eventlet worker and break outbound calls (e.g. the
+# Nominatim geocoding proxy). Must be set before eventlet monkey-patches.
+ENV EVENTLET_NO_GREENDNS=yes
 
 # Verify the app is serving before marking the container healthy
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

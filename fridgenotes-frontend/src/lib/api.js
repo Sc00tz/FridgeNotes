@@ -106,8 +106,14 @@ class APIClient {
         throw new Error('Access denied');
       case 404:
         throw new Error(errorData.error || errorData.message || 'Resource not found');
-      case 409:
-        throw new Error(errorData.error || errorData.message || 'Conflict');
+      case 409: {
+        // Surface conflict details so the sync layer can reconcile (server-wins):
+        // attach the HTTP status and the server's current representation.
+        const conflictError = new Error(errorData.error || errorData.message || 'Conflict');
+        conflictError.status = 409;
+        conflictError.current = errorData.current || null;
+        throw conflictError;
+      }
       case 422:
         throw new Error(errorData.error || errorData.message || 'Validation error');
       case 429:
@@ -175,6 +181,17 @@ class APIClient {
    */
   async getNotes() {
     return this.makeRequest('/notes');
+  }
+
+  /**
+   * Delta-sync: fetch notes changed and deleted since a cursor.
+   * @param {string} [since] - ISO cursor from a prior response's server_time.
+   *   Omit for a full initial sync.
+   * @returns {Promise<{changed: Array, deleted: Array, server_time: string}>}
+   */
+  async getChanges(since) {
+    const qs = since ? `?since=${encodeURIComponent(since)}` : '';
+    return this.makeRequest(`/sync${qs}`);
   }
 
   /**

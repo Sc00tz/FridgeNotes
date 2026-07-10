@@ -1082,6 +1082,68 @@ def run_migration_011_add_note_client_id():
             conn.close()
 
 
+def run_migration_012_create_deleted_notes_table():
+    """Migration 012: Create the deleted_notes tombstone table for delta-sync."""
+    migration_name = "012_create_deleted_notes_table"
+    db_path = get_db_path()
+
+    db_dir = os.path.dirname(db_path)
+    if db_dir and not os.path.exists(db_dir):
+        try:
+            os.makedirs(db_dir, exist_ok=True)
+            print(f"Created database directory: {db_dir}")
+        except Exception as e:
+            print(f"Warning: Could not create database directory {db_dir}: {e}")
+
+    if not os.path.exists(db_path):
+        print(f"Database not found at {db_path}, will be created when app starts")
+        return True
+
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        create_migration_table(cursor)
+
+        if is_migration_applied(cursor, migration_name):
+            print(f"✅ Migration {migration_name} already applied")
+            return True
+
+        print(f"📝 Running Migration {migration_name}: Creating deleted_notes table...")
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS deleted_notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                note_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_deleted_notes_user_deleted ON deleted_notes (user_id, deleted_at)')
+
+        mark_migration_applied(cursor, migration_name)
+        conn.commit()
+        print(f"✅ Migration {migration_name} completed successfully!")
+        print("   - Delta-sync tombstones are now supported!")
+        return True
+
+    except sqlite3.Error as e:
+        print(f"❌ Migration {migration_name} failed: {e}")
+        if conn:
+            conn.rollback()
+        return False
+    except Exception as e:
+        print(f"❌ Unexpected error in Migration {migration_name}: {e}")
+        if conn:
+            conn.rollback()
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
 def run_all_migrations():
     """Run all pending migrations"""
     print("🚀 Starting automatic database migrations...")
@@ -1113,6 +1175,7 @@ def run_all_migrations():
         run_migration_009_add_location_reminder_fields, # NEW: Add location-based reminder fields
         run_migration_010_create_attachments_table, # NEW: Create attachments table for file uploads
         run_migration_011_add_note_client_id, # NEW: Add client_id for idempotent offline creation
+        run_migration_012_create_deleted_notes_table, # NEW: Tombstones for delta-sync
         # Add future migrations here
     ]
     

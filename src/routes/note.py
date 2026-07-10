@@ -6,7 +6,7 @@ from flask import Blueprint, jsonify, request
 from flask_login import login_required, current_user
 from src.models.note import Note, ChecklistItem, SharedNote, db
 from src.models.user import User
-from src.services.note_service import get_notes_for_user, create_note, update_note, delete_note
+from src.services.note_service import get_notes_for_user, create_note, update_note, delete_note, get_changes_for_user
 from src.websocket_events import broadcast_note_update, broadcast_checklist_toggle, broadcast_notes_reorder
 from src.datetime_utils import parse_iso_datetime, InvalidInput
 from datetime import datetime
@@ -69,6 +69,20 @@ def get_all_notes():
     """Gets all notes for the current user."""
     notes = get_notes_for_user(current_user.id)
     return jsonify(notes)
+
+
+@note_bp.route('/sync', methods=['GET'])
+@login_required
+def sync_changes():
+    """Delta-sync: return notes changed and deleted since the `since` timestamp.
+
+    Query param `since` is an ISO datetime cursor (from a prior response's
+    `server_time`); omit it for a full initial sync. Returns
+    {changed: [...notes], deleted: [...note_ids], server_time: <cursor>}.
+    """
+    since_raw = request.args.get('since')
+    since = parse_iso_datetime(since_raw) if since_raw else None
+    return jsonify(get_changes_for_user(current_user.id, since))
 
 @note_bp.route('/notes', methods=['POST'])
 @login_required

@@ -1015,6 +1015,73 @@ def run_migration_010_create_attachments_table():
             conn.close()
 
 
+def run_migration_011_add_note_client_id():
+    """Migration 011: Add client_id to notes for idempotent offline creation."""
+    migration_name = "011_add_note_client_id"
+    db_path = get_db_path()
+
+    db_dir = os.path.dirname(db_path)
+    if db_dir and not os.path.exists(db_dir):
+        try:
+            os.makedirs(db_dir, exist_ok=True)
+            print(f"Created database directory: {db_dir}")
+        except Exception as e:
+            print(f"Warning: Could not create database directory {db_dir}: {e}")
+
+    if not os.path.exists(db_path):
+        print(f"Database not found at {db_path}, will be created when app starts")
+        return True
+
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        create_migration_table(cursor)
+
+        if is_migration_applied(cursor, migration_name):
+            print(f"✅ Migration {migration_name} already applied")
+            return True
+
+        if not check_table_exists(cursor, 'notes'):
+            print("notes table doesn't exist yet, skipping migration")
+            return True
+
+        if not check_column_exists(cursor, 'notes', 'client_id'):
+            print(f"📝 Running Migration {migration_name}: Adding client_id column...")
+            cursor.execute("ALTER TABLE notes ADD COLUMN client_id VARCHAR(64) NULL")
+        else:
+            print("   - client_id column already exists")
+
+        # Partial unique index enforces idempotency per user without constraining
+        # the many existing rows that have a NULL client_id.
+        cursor.execute('''
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_notes_user_client_id
+            ON notes (user_id, client_id)
+            WHERE client_id IS NOT NULL
+        ''')
+
+        mark_migration_applied(cursor, migration_name)
+        conn.commit()
+        print(f"✅ Migration {migration_name} completed successfully!")
+        print("   - Idempotent offline note creation is now supported!")
+        return True
+
+    except sqlite3.Error as e:
+        print(f"❌ Migration {migration_name} failed: {e}")
+        if conn:
+            conn.rollback()
+        return False
+    except Exception as e:
+        print(f"❌ Unexpected error in Migration {migration_name}: {e}")
+        if conn:
+            conn.rollback()
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
 def run_all_migrations():
     """Run all pending migrations"""
     print("🚀 Starting automatic database migrations...")
@@ -1045,6 +1112,7 @@ def run_all_migrations():
         run_migration_008_make_label_color_nullable, # NEW: Make labels.color nullable (NULL = inherit)
         run_migration_009_add_location_reminder_fields, # NEW: Add location-based reminder fields
         run_migration_010_create_attachments_table, # NEW: Create attachments table for file uploads
+        run_migration_011_add_note_client_id, # NEW: Add client_id for idempotent offline creation
         # Add future migrations here
     ]
     

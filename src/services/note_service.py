@@ -126,11 +126,21 @@ def create_note(user_id, data):
     Returns:
         The newly created note object.
     """
+    # Idempotent create: if the client supplied a client_id and a note with it
+    # already exists for this user, return that note instead of creating a
+    # duplicate. This makes replaying a queued offline create safe.
+    client_id = data.get('client_id')
+    if client_id:
+        existing = Note.query.filter_by(user_id=user_id, client_id=client_id).first()
+        if existing:
+            return existing
+
     max_position = db.session.query(db.func.max(Note.position)).filter_by(user_id=user_id).scalar()
     next_position = (max_position or -1) + 1
 
     note = Note(
         user_id=user_id,
+        client_id=client_id,
         title=data.get('title', ''),
         content=data.get('content', ''),
         note_type=data.get('note_type', 'text'),

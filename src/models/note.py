@@ -10,6 +10,10 @@ class Note(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    # Optional client-generated UUID for offline creation. Lets the client
+    # reference a note before the server assigns an id, and makes create
+    # idempotent so replaying a queued offline create doesn't duplicate.
+    client_id = db.Column(db.String(64), nullable=True, index=True)
     title = db.Column(db.String(200), nullable=True)
     content = db.Column(db.Text, nullable=True)
     note_type = db.Column(db.String(20), nullable=False, default='text')  # 'text' or 'checklist'
@@ -43,6 +47,7 @@ class Note(db.Model):
         """Serialize the note to a dict, optionally including per-user sharing details."""
         result = {
             'id': self.id,
+            'client_id': self.client_id,
             'user_id': self.user_id,
             'title': self.title,
             'content': self.content,

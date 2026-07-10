@@ -44,6 +44,19 @@ export const useNotes = (currentUser, isAuthenticated) => {
     notesRef.current = notes;
   }, [notes]);
 
+  // When an offline-created note syncs, replace the optimistic entry (keyed by
+  // its client_id) with the real server note so local state matches the server.
+  useEffect(() => {
+    offlineSync.setOnNoteIdResolved((clientId, serverNote) => {
+      setNotes(prevNotes => {
+        const withoutDupe = prevNotes.filter(n => n.id !== serverNote.id);
+        return withoutDupe.map(n =>
+          (n.id === clientId || n.client_id === clientId) ? serverNote : n
+        );
+      });
+    });
+  }, [offlineSync]);
+
   const handleNoteUpdate = useCallback((data) => {
     if (data.update_type === 'deleted') {
       setNotes(prevNotes => prevNotes.filter(note => note.id !== data.data.id));
@@ -181,9 +194,16 @@ export const useNotes = (currentUser, isAuthenticated) => {
     try {
       setLoading(true);
 
+      // Attach a stable client-generated id. The server persists it and makes
+      // create idempotent on it, and the client uses it as the optimistic
+      // local id so follow-up offline edits (which queue against this id) can
+      // be remapped to the real server id once the create syncs.
+      const clientId = (crypto?.randomUUID?.() || `cid_${Date.now()}_${Math.random().toString(36).slice(2)}`);
+      const dataWithClientId = { ...noteData, client_id: clientId };
+
       const result = await offlineSync.executeWithOfflineSupport({
         type: 'create_note',
-        data: noteData,
+        data: dataWithClientId,
       });
 
       if (result.success) {
@@ -196,8 +216,11 @@ export const useNotes = (currentUser, isAuthenticated) => {
         });
         return newNote;
       } else if (result.queued) {
+        // Use the client_id as the optimistic id so any edits made while still
+        // offline queue against a stable id the server will recognize.
         const optimisticNote = {
-          id: `temp_${Date.now()}`,
+          id: clientId,
+          client_id: clientId,
           ...noteData,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),

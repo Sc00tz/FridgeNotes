@@ -33,6 +33,13 @@ export const useOfflineSync = (api, currentUser) => {
   // handler never captures a stale closure.
   const syncPendingOperationsRef = useRef(null);
 
+  // Optional callback fired when an offline-created note's client_id resolves
+  // to a real server id, so the consumer (useNotes) can reconcile local state.
+  const onNoteIdResolvedRef = useRef(null);
+  const setOnNoteIdResolved = useCallback((fn) => {
+    onNoteIdResolvedRef.current = fn;
+  }, []);
+
   const storageKey = currentUser ? `${STORAGE_KEY_PREFIX}${currentUser.id}` : null;
 
   useEffect(() => {
@@ -174,12 +181,37 @@ export const useOfflineSync = (api, currentUser) => {
 
     try {
       const remainingQueue = [];
+      // Maps an offline note's client_id (used as its optimistic local id) to
+      // the real server id once its create syncs, so follow-up ops that were
+      // queued against the client_id target the right note instead of 404ing.
+      const idMap = {};
 
       for (const operation of queue) {
+        // Rewrite a queued op's noteId if it referenced an offline note that
+        // has since been assigned a real server id in this sync pass.
+        if (operation.noteId && idMap[operation.noteId]) {
+          operation = { ...operation, noteId: idMap[operation.noteId] };
+        }
+
         const result = await executeOperation(operation);
 
         if (result.success) {
           results.successful++;
+
+          // A create carries a client_id; record the client_id -> real id
+          // mapping and let the caller reconcile local state.
+          if (operation.type === 'create_note' && result.result) {
+            const clientId = operation.data?.client_id || result.result.client_id;
+            const realId = result.result.id;
+            if (clientId && realId != null && clientId !== realId) {
+              idMap[clientId] = realId;
+              try {
+                onNoteIdResolvedRef.current?.(clientId, result.result);
+              } catch (cbError) {
+                console.error('Error in onNoteIdResolved callback:', cbError);
+              }
+            }
+          }
         } else {
           results.failed++;
           results.errors.push({
@@ -315,6 +347,7 @@ export const useOfflineSync = (api, currentUser) => {
     syncPendingOperations,
     forceSync,
     clearSyncQueue,
+    setOnNoteIdResolved,
 
     queueOperation,
     getSyncQueue: () => getSyncQueue().length,

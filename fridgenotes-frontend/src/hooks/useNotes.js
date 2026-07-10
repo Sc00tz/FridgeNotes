@@ -111,8 +111,12 @@ export const useNotes = (currentUser, isAuthenticated) => {
     try {
       setLoading(true);
       const userNotes = await apiClient.getNotes();
-      setNotes(userNotes);
-      return userNotes;
+      // Defensively coerce to an array: a non-array response (e.g. an error
+      // object) would otherwise crash downstream .filter/.map calls and blank
+      // the entire app instead of surfacing a recoverable error.
+      const notesArray = Array.isArray(userNotes) ? userNotes : [];
+      setNotes(notesArray);
+      return notesArray;
     } catch (error) {
       showError('Failed to load notes: ' + error.message);
       throw error;

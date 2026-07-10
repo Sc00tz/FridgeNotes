@@ -24,7 +24,8 @@ export const useLabels = (isAuthenticated, currentUser) => {
       setLoading(true);
       setError(null);
       const userLabels = await apiClient.getLabels();
-      setLabels(userLabels);
+      // Coerce to an array; a non-array response would crash label .filter/.map.
+      setLabels(Array.isArray(userLabels) ? userLabels : []);
     } catch (error) {
       setError(error.message);
     } finally {

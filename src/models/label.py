@@ -11,7 +11,10 @@ class Label(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    color = db.Column(db.String(20), nullable=False, default='#3b82f6')
+    # NULL means "inherit from parent" (or the default when there is no parent),
+    # which lets a label be deliberately set to any color, including the default.
+    color = db.Column(db.String(20), nullable=True)
+    DEFAULT_COLOR = '#3b82f6'
     parent_id = db.Column(db.Integer, db.ForeignKey('labels.id'), nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -37,13 +40,13 @@ class Label(db.Model):
         return self.name
     
     def get_color(self):
-        """Get color, inheriting from parent if this label doesn't have one"""
-        if self.color and self.color != '#3b82f6':  # Has custom color
+        """Resolve the effective color, inheriting from the parent when unset (NULL)."""
+        if self.color:  # Explicitly set (any color, including the default blue)
             return self.color
-        elif self.parent:  # Inherit from parent
+        elif self.parent:  # Not set: inherit from parent
             return self.parent.get_color()
-        else:  # Use default
-            return self.color
+        else:  # Not set and no parent: fall back to the default
+            return self.DEFAULT_COLOR
     
     def to_dict(self, include_hierarchy=False):
         """Serialize the label to a dict, optionally including parent/children."""

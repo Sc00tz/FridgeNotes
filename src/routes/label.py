@@ -1,10 +1,14 @@
 """Blueprint for label management and note-label association endpoints."""
 
+import logging
+
 from flask import Blueprint, jsonify, request
 from flask_login import login_required, current_user
 from src.models.label import Label, NoteLabel, db
 from src.models.note import Note, SharedNote
 from sqlalchemy import or_, func
+
+logger = logging.getLogger(__name__)
 
 label_bp = Blueprint('label', __name__)
 
@@ -17,7 +21,8 @@ def get_labels():
         labels = Label.query.filter_by(user_id=current_user.id).order_by(Label.name).all()
         return jsonify([label.to_dict(include_hierarchy=True) for label in labels])
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.exception('Error in label endpoint')
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @label_bp.route('/labels', methods=['POST'])
@@ -50,7 +55,8 @@ def create_label():
         
         label = Label(
             name=name,
-            color=data.get('color', '#3b82f6'),
+            # None => inherit from parent / fall back to default (see Label.get_color).
+            color=data.get('color') or None,
             parent_id=parent_id,
             user_id=current_user.id
         )
@@ -62,7 +68,8 @@ def create_label():
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        logger.exception('Error in label endpoint')
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @label_bp.route('/labels/<int:label_id>', methods=['PUT'])
@@ -127,7 +134,8 @@ def update_label(label_id):
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        logger.exception('Error in label endpoint')
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @label_bp.route('/labels/<int:label_id>', methods=['DELETE'])
@@ -148,7 +156,8 @@ def delete_label(label_id):
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        logger.exception('Error in label endpoint')
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @label_bp.route('/labels/search', methods=['GET'])
@@ -199,7 +208,8 @@ def search_labels():
         return jsonify(results[:10])
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.exception('Error in label endpoint')
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @label_bp.route('/notes/<int:note_id>/labels', methods=['POST'])
@@ -237,7 +247,8 @@ def add_label_to_note(note_id):
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': f'Internal server error: {str(e)}'}), 500
+        logger.exception('Error in label endpoint')
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @label_bp.route('/notes/<int:note_id>/labels/<int:label_id>', methods=['DELETE'])
@@ -298,7 +309,8 @@ def remove_label_from_note(note_id, label_id):
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': f'Internal server error: {str(e)}'}), 500
+        logger.exception('Error in label endpoint')
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @label_bp.route('/labels/<int:label_id>/notes', methods=['GET'])
@@ -323,7 +335,8 @@ def get_notes_by_label(label_id):
         return jsonify([note.to_dict(current_user_id=current_user.id) for note in notes])
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.exception('Error in label endpoint')
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @label_bp.route('/labels/stats', methods=['GET'])
@@ -350,11 +363,13 @@ def get_label_stats():
                 'id': label_id,
                 'name': name,
                 'display_name': display_name,
-                'color': color,
+                # color may be NULL (inherit); fall back to the default for display.
+                'color': color or Label.DEFAULT_COLOR,
                 'note_count': count
             })
         
         return jsonify(results)
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.exception('Error in label endpoint')
+        return jsonify({'error': 'Internal server error'}), 500

@@ -1,10 +1,15 @@
 """Business logic for note operations including CRUD and real-time broadcast."""
 
+import logging
+
 from src.models.note import Note, ChecklistItem, SharedNote, db
 from src.models.user import User
 from src.websocket_events import broadcast_note_update, broadcast_checklist_toggle, broadcast_notes_reorder
+from src.datetime_utils import parse_iso_datetime
 from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy import and_, or_
+
+logger = logging.getLogger(__name__)
 
 
 def get_notes_for_user(user_id):
@@ -38,7 +43,7 @@ def get_notes_for_user(user_id):
         ).order_by(Note.pinned.desc(), Note.position.asc()).all()
 
     except Exception as e:
-        print(f"Warning: Error in optimized query, falling back to legacy method: {e}")
+        logger.warning("Error in optimized query, falling back to legacy method: %s", e)
         return _get_notes_for_user_legacy(user_id)
 
     return [note.to_dict(current_user_id=user_id) for note in notes_query]
@@ -88,6 +93,14 @@ def create_note(user_id, data):
         color=data.get('color', 'default'),
         position=next_position
     )
+
+    # Reminder fields may be set at creation time, not just via update.
+    if data.get('reminder_datetime'):
+        note.reminder_datetime = parse_iso_datetime(data['reminder_datetime'])
+    if 'reminder_completed' in data:
+        note.reminder_completed = data.get('reminder_completed', False)
+    if data.get('reminder_snoozed_until'):
+        note.reminder_snoozed_until = parse_iso_datetime(data['reminder_snoozed_until'])
 
     db.session.add(note)
     db.session.flush()
@@ -151,21 +164,13 @@ def update_note(note_id, current_user_id, data):
     note.archived = data.get('archived', note.archived)
 
     if 'reminder_datetime' in data:
-        from datetime import datetime
-        if data['reminder_datetime']:
-            note.reminder_datetime = datetime.fromisoformat(data['reminder_datetime'])
-        else:
-            note.reminder_datetime = None
+        note.reminder_datetime = parse_iso_datetime(data['reminder_datetime'])
 
     if 'reminder_completed' in data:
         note.reminder_completed = data.get('reminder_completed', note.reminder_completed)
 
     if 'reminder_snoozed_until' in data:
-        from datetime import datetime
-        if data['reminder_snoozed_until']:
-            note.reminder_snoozed_until = datetime.fromisoformat(data['reminder_snoozed_until'])
-        else:
-            note.reminder_snoozed_until = None
+        note.reminder_snoozed_until = parse_iso_datetime(data['reminder_snoozed_until'])
 
     if note.note_type == 'checklist' and 'checklist_items' in data:
         ChecklistItem.query.filter_by(note_id=note_id).delete()
@@ -194,13 +199,13 @@ def update_note(note_id, current_user_id, data):
     try:
         note_dict = note.to_dict(current_user_id=current_user_id)
     except Exception as e:
-        print(f"Warning: Error getting note dict, using fallback: {e}")
+        logger.warning("Error getting note dict, using fallback: %s", e)
         note_dict = note.to_dict()
 
     try:
         broadcast_note_update(note_id, 'updated', note_dict)
     except Exception as e:
-        print(f"Warning: Error broadcasting update: {e}")
+        logger.warning("Error broadcasting update: %s", e)
 
     return note
 
@@ -237,4 +242,4 @@ def delete_note(note_id, current_user_id):
         for uid in affected_user_ids:
             socketio.emit('note_update_received', payload, room=f'user_{uid}')
     except Exception as e:
-        print(f"Warning: Error broadcasting deletion: {e}")
+        logger.warning("Error broadcasting deletion: %s", e)

@@ -108,6 +108,7 @@ def run_migration_000_cleanup_duplicate_tables():
         print(f"Database not found at {db_path}, skipping migration")
         return True
     
+    conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -176,6 +177,7 @@ def run_migration_001_add_hidden_by_recipient():
         print(f"Database not found at {db_path}, will be created when app starts")
         return True
     
+    conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -242,6 +244,7 @@ def run_migration_002_add_color_field():
         print(f"Database not found at {db_path}, will be created when app starts")
         return True
     
+    conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -308,6 +311,7 @@ def run_migration_003_create_labels_system():
         print(f"Database not found at {db_path}, will be created when app starts")
         return True
     
+    conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -394,6 +398,7 @@ def run_migration_004_add_position_field():
         print(f"Database not found at {db_path}, will be created when app starts")
         return True
     
+    conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -488,6 +493,7 @@ def run_migration_005_add_pinned_field():
         print(f"Database not found at {db_path}, will be created when app starts")
         return True
     
+    conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -570,6 +576,7 @@ def run_migration_006_add_reminder_fields():
         print(f"Database not found at {db_path}, will be created when app starts")
         return True
     
+    conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -671,6 +678,7 @@ def run_migration_007_create_performance_indexes():
         print(f"Database not found at {db_path}, will be created when app starts")
         return True
     
+    conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -760,6 +768,117 @@ def run_migration_007_create_performance_indexes():
         if conn:
             conn.close()
 
+def run_migration_008_make_label_color_nullable():
+    """Migration 008: Make labels.color nullable so NULL means 'inherit from parent'.
+
+    Migration 003 created labels.color as NOT NULL DEFAULT '#3b82f6'. The model now
+    treats NULL as "inherit", so inserting a label without a color must be allowed.
+    SQLite can't ALTER a column's nullability, so the table is rebuilt.
+    """
+    migration_name = "008_make_label_color_nullable"
+    db_path = get_db_path()
+
+    db_dir = os.path.dirname(db_path)
+    if db_dir and not os.path.exists(db_dir):
+        try:
+            os.makedirs(db_dir, exist_ok=True)
+            print(f"Created database directory: {db_dir}")
+        except Exception as e:
+            print(f"Warning: Could not create database directory {db_dir}: {e}")
+
+    if not os.path.exists(db_path):
+        print(f"Database not found at {db_path}, will be created when app starts")
+        return True
+
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # Explicitly disable FK enforcement during the rebuild. DROP TABLE labels
+        # would otherwise ON DELETE CASCADE and wipe every note_labels association.
+        # sqlite3 defaults this OFF, but we set it explicitly so correctness does
+        # not silently depend on that default.
+        cursor.execute("PRAGMA foreign_keys=OFF")
+
+        create_migration_table(cursor)
+
+        if is_migration_applied(cursor, migration_name):
+            print(f"✅ Migration {migration_name} already applied")
+            return True
+
+        # If labels doesn't exist yet, the model/migration 003 will create it
+        # correctly (model is now nullable); nothing to rebuild.
+        if not check_table_exists(cursor, 'labels'):
+            print("labels table doesn't exist yet, marking migration as applied")
+            mark_migration_applied(cursor, migration_name)
+            conn.commit()
+            return True
+
+        # Detect whether color is already nullable; if so, skip the rebuild.
+        cursor.execute("PRAGMA table_info(labels)")
+        color_notnull = None
+        for row in cursor.fetchall():
+            # row: (cid, name, type, notnull, dflt_value, pk)
+            if row[1] == 'color':
+                color_notnull = row[3]
+                break
+
+        if color_notnull == 0:
+            print("✅ labels.color is already nullable, marking as applied")
+            mark_migration_applied(cursor, migration_name)
+            conn.commit()
+            return True
+
+        print(f"📝 Running Migration {migration_name}: Rebuilding labels table with nullable color...")
+
+        # Rebuild the table (SQLite cannot drop a NOT NULL constraint in place).
+        # Foreign keys are off by default per-connection, so a straight rename/copy is safe here.
+        cursor.execute('''
+            CREATE TABLE labels_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(100) NOT NULL,
+                color VARCHAR(20) NULL,
+                parent_id INTEGER NULL,
+                user_id INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (parent_id) REFERENCES labels (id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        ''')
+        cursor.execute('''
+            INSERT INTO labels_new (id, name, color, parent_id, user_id, created_at, updated_at)
+            SELECT id, name, color, parent_id, user_id, created_at, updated_at FROM labels
+        ''')
+        cursor.execute("DROP TABLE labels")
+        cursor.execute("ALTER TABLE labels_new RENAME TO labels")
+
+        # Recreate the indexes that lived on the old table (from migration 003).
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_labels_user_id ON labels (user_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_labels_parent_id ON labels (parent_id)')
+
+        mark_migration_applied(cursor, migration_name)
+        conn.commit()
+        print(f"✅ Migration {migration_name} completed successfully!")
+        print("   - labels.color is now nullable (NULL = inherit from parent)")
+        return True
+
+    except sqlite3.Error as e:
+        print(f"❌ Migration {migration_name} failed: {e}")
+        if conn:
+            conn.rollback()
+        return False
+    except Exception as e:
+        print(f"❌ Unexpected error in Migration {migration_name}: {e}")
+        if conn:
+            conn.rollback()
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
 def run_all_migrations():
     """Run all pending migrations"""
     print("🚀 Starting automatic database migrations...")
@@ -787,6 +906,7 @@ def run_all_migrations():
         run_migration_005_add_pinned_field,    # NEW: Add pinned field for note pinning
         run_migration_006_add_reminder_fields, # NEW: Add reminder fields for date/time reminders
         run_migration_007_create_performance_indexes, # NEW: Create performance indexes
+        run_migration_008_make_label_color_nullable, # NEW: Make labels.color nullable (NULL = inherit)
         # Add future migrations here
     ]
     

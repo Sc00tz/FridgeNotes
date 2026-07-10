@@ -72,22 +72,6 @@ class User(UserMixin, db.Model):
         }
 
     @staticmethod
-    def create_admin_user(username="admin", email="admin@example.com", password="admin123"):
-        """Create an admin user if none exists."""
-        existing_admin = User.query.filter_by(is_admin=True).first()
-        if not existing_admin:
-            admin_user = User(
-                username=username,
-                email=email,
-                password=password,
-                is_admin=True
-            )
-            db.session.add(admin_user)
-            db.session.commit()
-            return admin_user
-        return existing_admin
-
-    @staticmethod
     def get_by_username(username):
         """Get user by username."""
         return User.query.filter_by(username=username).first()

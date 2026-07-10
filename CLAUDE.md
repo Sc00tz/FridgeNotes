@@ -30,23 +30,18 @@ pip install -r requirements.txt
 # Run backend development server (serves on http://localhost:5009)
 python src/main.py
 
-# Run in production mode with Docker
-docker-compose up -d
+# Run in production mode with Docker (copy .env.example to .env first)
+docker compose -f docker-compose.local.yml up -d
 
 # View Docker logs for admin credentials
-docker-compose logs fridgenotes | grep "Password:"
+docker compose -f docker-compose.local.yml logs fridgenotes | grep "Password:"
 ```
 
 ### Database Operations
 ```bash
-# Run database migrations
+# Migrations run automatically on startup (src/migrations.py via main.py).
+# To run them standalone against the local database:
 python src/migrations.py
-
-# Fix database schema issues
-python fix_database.py
-
-# Comprehensive database repair
-python comprehensive_db_fix.py
 ```
 
 ## Project Architecture
@@ -174,7 +169,7 @@ The frontend uses a **composite hook pattern** for clean separation of concerns:
 - `fridgenotes-frontend/src/components/ImportExportDialog.jsx` - Backup/restore UI
 - `src/models/note.py` - Note, ChecklistItem, SharedNote models
 - `src/websocket_events.py` - Real-time collaboration events
-- `docker-compose.yml` - Production deployment configuration
+- `docker-compose.local.yml` - Production deployment configuration (pairs with `.env`; see `.env.example`)
 
 ## Debugging Notes
 

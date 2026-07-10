@@ -1,12 +1,17 @@
 """Blueprint for all note-related API endpoints."""
 
+import logging
+
 from flask import Blueprint, jsonify, request
 from flask_login import login_required, current_user
 from src.models.note import Note, ChecklistItem, SharedNote, db
 from src.models.user import User
 from src.services.note_service import get_notes_for_user, create_note, update_note, delete_note
 from src.websocket_events import broadcast_note_update, broadcast_checklist_toggle, broadcast_notes_reorder
+from src.datetime_utils import parse_iso_datetime, InvalidInput
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 note_bp = Blueprint('note', __name__)
 
@@ -55,7 +60,8 @@ def debug_schema():
             'database_path': current_app.config.get('SQLALCHEMY_DATABASE_URI', 'Not set')
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.exception('Error in debug_schema')
+        return jsonify({'error': 'Internal server error'}), 500
 
 @note_bp.route('/notes', methods=['GET'])
 @login_required
@@ -117,7 +123,12 @@ def update_checklist_item(note_id, item_id):
     old_completed = item.completed
     item.text = data.get('text', item.text)
     item.completed = data.get('completed', item.completed)
-    
+
+    # Bump the parent note's updated_at: SQLAlchemy's onupdate only fires when a
+    # column on the note row itself changes, so editing a child item alone would
+    # otherwise leave updated_at stale and break updated_at-based sync/ordering.
+    note.updated_at = datetime.utcnow()
+
     db.session.commit()
     
     # Broadcast the checklist item update if completion status changed
@@ -135,11 +146,22 @@ def share_note(note_id):
     if note.user_id != current_user.id:
         return jsonify({'error': 'Access denied'}), 403
 
-    data = request.json
+    data = request.json or {}
 
-    target_user = User.query.filter_by(username=data['username']).first()
+    username = data.get('username')
+    if not username:
+        return jsonify({'error': 'Username is required'}), 400
+
+    access_level = data.get('access_level', 'read')
+    if access_level not in ('read', 'edit'):
+        return jsonify({'error': "access_level must be 'read' or 'edit'"}), 400
+
+    target_user = User.query.filter_by(username=username).first()
     if not target_user:
         return jsonify({'error': 'User not found'}), 404
+
+    if target_user.id == current_user.id:
+        return jsonify({'error': 'Cannot share a note with yourself'}), 400
 
     existing_share = SharedNote.query.filter_by(note_id=note_id, user_id=target_user.id).first()
     if existing_share:
@@ -148,7 +170,7 @@ def share_note(note_id):
     shared_note = SharedNote(
         note_id=note_id,
         user_id=target_user.id,
-        access_level=data.get('access_level', 'read')
+        access_level=access_level
     )
 
     db.session.add(shared_note)
@@ -263,7 +285,7 @@ def reorder_notes():
         try:
             broadcast_notes_reorder(current_user.id, note_ids)
         except Exception as e:
-            print(f"Warning: Error broadcasting reorder: {e}")
+            logger.warning("Error broadcasting reorder: %s", e)
 
         return jsonify({
             'message': 'Notes reordered successfully',
@@ -271,7 +293,7 @@ def reorder_notes():
         })
 
     except Exception as e:
-        print(f"Error in reorder_notes: {e}")
+        logger.exception("Error in reorder_notes")
         db.session.rollback()
         return jsonify({'error': 'Failed to reorder notes'}), 500
 
@@ -304,7 +326,7 @@ def toggle_note_pin(note_id):
                 'user_id': current_user.id
             })
         except Exception as e:
-            print(f"Warning: Error broadcasting pin change: {e}")
+            logger.warning("Error broadcasting pin change: %s", e)
 
         return jsonify({
             'note_id': note_id,
@@ -313,7 +335,7 @@ def toggle_note_pin(note_id):
         })
 
     except Exception as e:
-        print(f"Error in toggle_note_pin: {e}")
+        logger.exception("Error in toggle_note_pin")
         db.session.rollback()
         return jsonify({'error': 'Failed to update note pin status'}), 500
 
@@ -344,7 +366,7 @@ def complete_reminder(note_id):
         })
 
     except Exception as e:
-        print(f"Error in complete_reminder: {e}")
+        logger.exception("Error in complete_reminder")
         db.session.rollback()
         return jsonify({'error': 'Failed to complete reminder'}), 500
 
@@ -367,7 +389,11 @@ def snooze_reminder(note_id):
             if not shared_note or shared_note.access_level != 'edit':
                 return jsonify({'error': 'Access denied'}), 403
 
-        snooze_datetime = datetime.fromisoformat(snooze_until.replace('Z', '+00:00'))
+        try:
+            snooze_datetime = parse_iso_datetime(snooze_until)
+        except InvalidInput:
+            return jsonify({'error': 'Invalid snooze_until datetime'}), 400
+
         note.reminder_snoozed_until = snooze_datetime
         db.session.commit()
 
@@ -381,7 +407,7 @@ def snooze_reminder(note_id):
         })
 
     except Exception as e:
-        print(f"Error in snooze_reminder: {e}")
+        logger.exception("Error in snooze_reminder")
         db.session.rollback()
         return jsonify({'error': 'Failed to snooze reminder'}), 500
 
@@ -404,5 +430,5 @@ def dismiss_reminder(note_id):
         })
 
     except Exception as e:
-        print(f"Error in dismiss_reminder: {e}")
+        logger.exception("Error in dismiss_reminder")
         return jsonify({'error': 'Failed to dismiss reminder'}), 500

@@ -199,6 +199,17 @@ class APIClient {
   }
 
   /**
+   * Geocode an address or business name to coordinates (for location reminders).
+   * Proxied server-side via OpenStreetMap Nominatim.
+   * @param {string} query
+   * @returns {Promise<Array<{name:string, latitude:number, longitude:number}>>}
+   */
+  async geocode(query) {
+    if (!query || !query.trim()) return [];
+    return this.makeRequest(`/geocode?q=${encodeURIComponent(query.trim())}`);
+  }
+
+  /**
    * List attachments for a note.
    * @param {number|string} noteId
    * @returns {Promise<Array>} attachment metadata

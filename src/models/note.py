@@ -20,6 +20,14 @@ class Note(db.Model):
     reminder_datetime = db.Column(db.DateTime, nullable=True)
     reminder_completed = db.Column(db.Boolean, default=False)
     reminder_snoozed_until = db.Column(db.DateTime, nullable=True)
+    # Location-based reminder: geofence center, trigger radius (meters), and a
+    # human-readable label. Geofence triggering is performed client-side; the
+    # server only stores and serves these fields. reminder_completed is shared
+    # with the time-based reminder above.
+    reminder_latitude = db.Column(db.Float, nullable=True)
+    reminder_longitude = db.Column(db.Float, nullable=True)
+    reminder_radius = db.Column(db.Integer, nullable=True)
+    reminder_location_name = db.Column(db.String(200), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -45,6 +53,10 @@ class Note(db.Model):
             'reminder_datetime': self.reminder_datetime.strftime('%Y-%m-%dT%H:%M:%S') if self.reminder_datetime else None,
             'reminder_completed': self.reminder_completed,
             'reminder_snoozed_until': self.reminder_snoozed_until.strftime('%Y-%m-%dT%H:%M:%S') if self.reminder_snoozed_until else None,
+            'reminder_latitude': self.reminder_latitude,
+            'reminder_longitude': self.reminder_longitude,
+            'reminder_radius': self.reminder_radius,
+            'reminder_location_name': self.reminder_location_name,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'checklist_items': [item.to_dict() for item in self.checklist_items] if self.note_type == 'checklist' else [],

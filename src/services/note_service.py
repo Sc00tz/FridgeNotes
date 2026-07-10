@@ -5,11 +5,55 @@ import logging
 from src.models.note import Note, ChecklistItem, SharedNote, db
 from src.models.user import User
 from src.websocket_events import broadcast_note_update, broadcast_checklist_toggle, broadcast_notes_reorder
-from src.datetime_utils import parse_iso_datetime
+from src.datetime_utils import parse_iso_datetime, InvalidInput
 from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy import and_, or_
 
 logger = logging.getLogger(__name__)
+
+
+def _apply_location_reminder(note, data):
+    """Apply location-reminder fields from a request payload onto a note.
+
+    Only keys present in ``data`` are touched, so partial updates leave other
+    fields alone. Coordinates and radius are validated; passing an explicit
+    null clears the field. Raises InvalidInput (-> HTTP 400) on bad values.
+    """
+    if 'reminder_latitude' in data:
+        note.reminder_latitude = _validate_coordinate(data['reminder_latitude'], 'latitude', 90)
+    if 'reminder_longitude' in data:
+        note.reminder_longitude = _validate_coordinate(data['reminder_longitude'], 'longitude', 180)
+    if 'reminder_radius' in data:
+        note.reminder_radius = _validate_radius(data['reminder_radius'])
+    if 'reminder_location_name' in data:
+        name = data['reminder_location_name']
+        note.reminder_location_name = name.strip()[:200] if isinstance(name, str) and name.strip() else None
+
+
+def _validate_coordinate(value, label, limit):
+    """Validate a latitude/longitude value; None clears it. Returns a float or None."""
+    if value is None or value == '':
+        return None
+    try:
+        coord = float(value)
+    except (TypeError, ValueError):
+        raise InvalidInput(f'Invalid {label}')
+    if not -limit <= coord <= limit:
+        raise InvalidInput(f'{label} out of range')
+    return coord
+
+
+def _validate_radius(value):
+    """Validate a geofence radius in meters; None clears it. Returns an int or None."""
+    if value is None or value == '':
+        return None
+    try:
+        radius = int(value)
+    except (TypeError, ValueError):
+        raise InvalidInput('Invalid radius')
+    if radius <= 0 or radius > 100000:  # cap at 100 km to reject nonsense values
+        raise InvalidInput('radius out of range')
+    return radius
 
 
 def get_notes_for_user(user_id):
@@ -102,6 +146,8 @@ def create_note(user_id, data):
     if data.get('reminder_snoozed_until'):
         note.reminder_snoozed_until = parse_iso_datetime(data['reminder_snoozed_until'])
 
+    _apply_location_reminder(note, data)
+
     db.session.add(note)
     db.session.flush()
 
@@ -171,6 +217,8 @@ def update_note(note_id, current_user_id, data):
 
     if 'reminder_snoozed_until' in data:
         note.reminder_snoozed_until = parse_iso_datetime(data['reminder_snoozed_until'])
+
+    _apply_location_reminder(note, data)
 
     if note.note_type == 'checklist' and 'checklist_items' in data:
         ChecklistItem.query.filter_by(note_id=note_id).delete()

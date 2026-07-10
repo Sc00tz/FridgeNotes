@@ -879,6 +879,74 @@ def run_migration_008_make_label_color_nullable():
             conn.close()
 
 
+def run_migration_009_add_location_reminder_fields():
+    """Migration 009: Add location-based reminder fields to the notes table."""
+    migration_name = "009_add_location_reminder_fields"
+    db_path = get_db_path()
+
+    db_dir = os.path.dirname(db_path)
+    if db_dir and not os.path.exists(db_dir):
+        try:
+            os.makedirs(db_dir, exist_ok=True)
+            print(f"Created database directory: {db_dir}")
+        except Exception as e:
+            print(f"Warning: Could not create database directory {db_dir}: {e}")
+
+    if not os.path.exists(db_path):
+        print(f"Database not found at {db_path}, will be created when app starts")
+        return True
+
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        create_migration_table(cursor)
+
+        if is_migration_applied(cursor, migration_name):
+            print(f"✅ Migration {migration_name} already applied")
+            return True
+
+        if not check_table_exists(cursor, 'notes'):
+            print("notes table doesn't exist yet, skipping migration")
+            return True
+
+        print(f"📝 Running Migration {migration_name}: Adding location reminder fields...")
+
+        columns = [
+            ('reminder_latitude', 'FLOAT NULL'),
+            ('reminder_longitude', 'FLOAT NULL'),
+            ('reminder_radius', 'INTEGER NULL'),
+            ('reminder_location_name', 'VARCHAR(200) NULL'),
+        ]
+        for name, ddl in columns:
+            if not check_column_exists(cursor, 'notes', name):
+                print(f"   - Adding {name} column...")
+                cursor.execute(f"ALTER TABLE notes ADD COLUMN {name} {ddl}")
+            else:
+                print(f"   - {name} column already exists")
+
+        mark_migration_applied(cursor, migration_name)
+        conn.commit()
+        print(f"✅ Migration {migration_name} completed successfully!")
+        print("   - Location-based reminders are now ready!")
+        return True
+
+    except sqlite3.Error as e:
+        print(f"❌ Migration {migration_name} failed: {e}")
+        if conn:
+            conn.rollback()
+        return False
+    except Exception as e:
+        print(f"❌ Unexpected error in Migration {migration_name}: {e}")
+        if conn:
+            conn.rollback()
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
 def run_all_migrations():
     """Run all pending migrations"""
     print("🚀 Starting automatic database migrations...")
@@ -907,6 +975,7 @@ def run_all_migrations():
         run_migration_006_add_reminder_fields, # NEW: Add reminder fields for date/time reminders
         run_migration_007_create_performance_indexes, # NEW: Create performance indexes
         run_migration_008_make_label_color_nullable, # NEW: Make labels.color nullable (NULL = inherit)
+        run_migration_009_add_location_reminder_fields, # NEW: Add location-based reminder fields
         # Add future migrations here
     ]
     

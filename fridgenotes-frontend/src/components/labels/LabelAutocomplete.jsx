@@ -149,13 +149,14 @@ const LabelAutocomplete = ({
     );
   };
 
-  // Default trigger button
+  // Default trigger button. Note: the click handler lives on the wrapper div
+  // below (not here), so a click doesn't fire the toggle twice — that double
+  // toggle previously opened then immediately closed the dropdown.
   const defaultTrigger = showAddButton ? (
     <Button
       variant="ghost"
       size="sm"
-      onClick={() => setIsOpen(!isOpen)}
-      className="h-6 px-2 text-xs border border-dashed border-gray-300 hover:border-gray-400"
+      className="h-6 px-2 text-xs border border-dashed border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500"
     >
       <Plus className="h-3 w-3 mr-1" />
       Add Label
@@ -166,7 +167,7 @@ const LabelAutocomplete = ({
 
   return (
     <div className={`label-autocomplete relative ${className}`} ref={dropdownRef}>
-      {/* Trigger */}
+      {/* Trigger (single toggle handler on the wrapper) */}
       {trigger && (
         <div onClick={() => setIsOpen(!isOpen)}>
           {trigger}
@@ -175,9 +176,9 @@ const LabelAutocomplete = ({
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute top-full left-0 mt-1 z-50 bg-white border rounded-lg shadow-lg min-w-[250px] max-w-[350px]">
+        <div className="absolute top-full left-0 mt-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg min-w-[250px] max-w-[350px]">
           {/* Search input */}
-          <div className="p-3 border-b">
+          <div className="p-3 border-b border-gray-200 dark:border-gray-700">
             <div className="relative">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
               <Input
@@ -212,9 +213,9 @@ const LabelAutocomplete = ({
                   <button
                     key={label.id}
                     onClick={() => handleSelect(label)}
-                    className={`w-full flex items-center gap-3 p-3 rounded text-left transition-colors ${index === selectedIndex
-                        ? 'bg-blue-50 border border-blue-200'
-                        : 'hover:bg-gray-50'
+                    className={`w-full flex items-center gap-3 p-3 rounded text-left transition-colors text-gray-900 dark:text-gray-100 ${index === selectedIndex
+                        ? 'bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800'
+                        : 'hover:bg-gray-50 dark:hover:bg-gray-700'
                       }`}
                   >
                     {/* Color indicator */}
@@ -247,7 +248,7 @@ const LabelAutocomplete = ({
 
           {/* Keyboard shortcuts hint */}
           {suggestions.length > 0 && (
-            <div className="p-2 border-t bg-gray-50 text-xs text-gray-500 flex items-center justify-between">
+            <div className="p-2 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-xs text-gray-500 dark:text-gray-400 flex items-center justify-between">
               <span>Use ↑↓ to navigate</span>
               <span className="flex items-center gap-1">
                 <CornerDownLeft className="h-3 w-3" />

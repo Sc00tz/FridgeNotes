@@ -284,6 +284,14 @@ def delete_note(note_id, current_user_id):
     db.session.delete(note)
     db.session.commit()
 
+    # The DB cascade removes attachment rows, but the on-disk files are ours to
+    # clean up. Do this after commit so a failed delete doesn't lose files.
+    try:
+        from src import attachments as storage
+        storage.delete_note_dir(note_id)
+    except Exception as e:
+        logger.warning("Error removing attachment files for note %s: %s", note_id, e)
+
     try:
         from src.websocket_events import socketio
         payload = {'note_id': note_id, 'update_type': 'deleted', 'data': {'id': note_id}}

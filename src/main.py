@@ -21,7 +21,7 @@ from flask_login import LoginManager
 # Import models in the correct order to avoid circular imports
 from src.models.user import db, User
 # Import note models AFTER user model is loaded
-from src.models.note import Note, ChecklistItem, SharedNote
+from src.models.note import Note, ChecklistItem, SharedNote, Attachment
 # Import label models
 from src.models.label import Label, NoteLabel
 
@@ -30,6 +30,7 @@ from src.routes.user import user_bp
 from src.routes.note import note_bp
 from src.routes.auth import auth_bp
 from src.routes.label import label_bp
+from src.routes.attachment import attachment_bp
 from src.websocket_events import socketio
 from src.error_handlers import register_error_handlers
 
@@ -93,6 +94,11 @@ app.register_blueprint(auth_bp, url_prefix='/api/auth')
 app.register_blueprint(user_bp, url_prefix='/api')
 app.register_blueprint(note_bp, url_prefix='/api')
 app.register_blueprint(label_bp, url_prefix='/api')
+app.register_blueprint(attachment_bp, url_prefix='/api')
+
+# Cap request bodies. Slightly above the 25 MB per-file attachment limit to
+# leave room for multipart overhead; save_upload enforces the exact file cap.
+app.config['MAX_CONTENT_LENGTH'] = 26 * 1024 * 1024
 
 register_error_handlers(app)
 

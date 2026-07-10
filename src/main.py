@@ -128,7 +128,13 @@ def debug_pwa():
 app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'database', 'app.db')}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-app.config['SESSION_COOKIE_SECURE'] = _is_production
+# The session cookie's Secure flag is NOT tied to FLASK_ENV: this is a
+# self-hosted app commonly served over plain HTTP on a LAN, where a Secure
+# cookie would be silently dropped by the browser (login appears to succeed
+# but the session never persists). Default off; set SESSION_COOKIE_SECURE=true
+# when serving over HTTPS (e.g. behind a reverse proxy).
+_cookie_secure = os.environ.get('SESSION_COOKIE_SECURE', '').strip().lower() in ('1', 'true', 'yes', 'on')
+app.config['SESSION_COOKIE_SECURE'] = _cookie_secure
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours

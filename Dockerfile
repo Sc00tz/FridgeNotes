@@ -19,9 +19,13 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Install system dependencies
+# - gcc: build native Python deps
+# - curl: used by the container HEALTHCHECK
+# - gosu: drop from root to the app user in the entrypoint after fixing volume perms
 RUN apt-get update && apt-get install -y \
     gcc \
     curl \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -33,11 +37,18 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the application code
 COPY src/ ./src/
 
-# Copy built frontend from frontend-builder stage  
+# Copy built frontend from frontend-builder stage
 COPY --from=frontend-builder /app/src/static/ ./src/static/
 
-# Create database directory
-RUN mkdir -p src/database
+# Create a non-root user to run the application and the database directory it owns
+RUN useradd --create-home --uid 1000 appuser \
+    && mkdir -p src/database \
+    && chown -R appuser:appuser /app
+
+# Entrypoint fixes ownership of the (possibly bind-mounted) database volume,
+# then drops privileges to appuser before exec'ing the app.
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Expose port
 EXPOSE 5009
@@ -49,5 +60,14 @@ ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONIOENCODING=UTF-8
 
-# Run the application
-CMD ["python", "-u", "src/main.py"]
+# Verify the app is serving before marking the container healthy
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -fsS http://localhost:5009/api/health || exit 1
+
+ENTRYPOINT ["docker-entrypoint.sh"]
+
+# Serve with gunicorn's eventlet worker (required for Flask-SocketIO). A single
+# worker is used because real-time broadcasts share in-process state; scaling out
+# would require a message queue (e.g. Redis) configured in websocket_events.py.
+CMD ["gunicorn", "--worker-class", "eventlet", "--workers", "1", \
+     "--bind", "0.0.0.0:5009", "--access-logfile", "-", "src.main:app"]

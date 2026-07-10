@@ -259,6 +259,12 @@ with app.app_context():
         log_with_flush(f"❌ Initialization error: {e}")
 
 
+@app.route('/api/health')
+def health_check():
+    """Lightweight liveness probe used by the container HEALTHCHECK."""
+    return {'status': 'ok'}
+
+
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve(path):

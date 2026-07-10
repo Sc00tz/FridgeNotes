@@ -947,6 +947,74 @@ def run_migration_009_add_location_reminder_fields():
             conn.close()
 
 
+def run_migration_010_create_attachments_table():
+    """Migration 010: Create the attachments table for note file attachments."""
+    migration_name = "010_create_attachments_table"
+    db_path = get_db_path()
+
+    db_dir = os.path.dirname(db_path)
+    if db_dir and not os.path.exists(db_dir):
+        try:
+            os.makedirs(db_dir, exist_ok=True)
+            print(f"Created database directory: {db_dir}")
+        except Exception as e:
+            print(f"Warning: Could not create database directory {db_dir}: {e}")
+
+    if not os.path.exists(db_path):
+        print(f"Database not found at {db_path}, will be created when app starts")
+        return True
+
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        create_migration_table(cursor)
+
+        if is_migration_applied(cursor, migration_name):
+            print(f"✅ Migration {migration_name} already applied")
+            return True
+
+        print(f"📝 Running Migration {migration_name}: Creating attachments table...")
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS attachments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                note_id INTEGER NOT NULL,
+                uploader_id INTEGER NOT NULL,
+                filename VARCHAR(255) NOT NULL,
+                original_filename VARCHAR(255) NULL,
+                mime_type VARCHAR(100) NOT NULL,
+                file_size INTEGER NOT NULL DEFAULT 0,
+                attachment_type VARCHAR(10) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (note_id) REFERENCES notes (id) ON DELETE CASCADE,
+                FOREIGN KEY (uploader_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_attachments_note_id ON attachments (note_id)')
+
+        mark_migration_applied(cursor, migration_name)
+        conn.commit()
+        print(f"✅ Migration {migration_name} completed successfully!")
+        print("   - File attachments (images/audio) are now ready!")
+        return True
+
+    except sqlite3.Error as e:
+        print(f"❌ Migration {migration_name} failed: {e}")
+        if conn:
+            conn.rollback()
+        return False
+    except Exception as e:
+        print(f"❌ Unexpected error in Migration {migration_name}: {e}")
+        if conn:
+            conn.rollback()
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
 def run_all_migrations():
     """Run all pending migrations"""
     print("🚀 Starting automatic database migrations...")
@@ -976,6 +1044,7 @@ def run_all_migrations():
         run_migration_007_create_performance_indexes, # NEW: Create performance indexes
         run_migration_008_make_label_color_nullable, # NEW: Make labels.color nullable (NULL = inherit)
         run_migration_009_add_location_reminder_fields, # NEW: Add location-based reminder fields
+        run_migration_010_create_attachments_table, # NEW: Create attachments table for file uploads
         # Add future migrations here
     ]
     

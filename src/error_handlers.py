@@ -20,11 +20,16 @@ def handle_invalid_input(err):
     """Handles InvalidInput (client-supplied data that failed validation) as a 400."""
     return jsonify({'error': str(err) or 'Invalid input'}), 400
 
+def handle_413(err):
+    """Handles request bodies exceeding MAX_CONTENT_LENGTH (e.g. oversized uploads)."""
+    return jsonify({'error': 'File too large'}), 413
+
 def register_error_handlers(app):
     """Registers all error handlers with the Flask app."""
     from src.datetime_utils import InvalidInput
     app.register_error_handler(404, handle_404)
     app.register_error_handler(403, handle_403)
+    app.register_error_handler(413, handle_413)
     app.register_error_handler(500, handle_500)
     app.register_error_handler(PermissionError, handle_permission_error)
     app.register_error_handler(InvalidInput, handle_invalid_input)

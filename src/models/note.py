@@ -34,6 +34,7 @@ class Note(db.Model):
     checklist_items = db.relationship('ChecklistItem', backref='note', lazy=True, cascade='all, delete-orphan')
     shared_notes = db.relationship('SharedNote', backref='note', lazy=True, cascade='all, delete-orphan')
     labels = db.relationship('Label', secondary='note_labels', lazy=True)
+    attachments = db.relationship('Attachment', backref='note', lazy=True, cascade='all, delete-orphan')
 
     def __repr__(self):
         return f'<Note {self.id}: {self.title}>'
@@ -60,7 +61,8 @@ class Note(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'checklist_items': [item.to_dict() for item in self.checklist_items] if self.note_type == 'checklist' else [],
-            'labels': [label.to_dict() for label in self.labels]
+            'labels': [label.to_dict() for label in self.labels],
+            'attachments': [attachment.to_dict() for attachment in self.attachments]
         }
 
         if current_user_id:
@@ -137,4 +139,40 @@ class SharedNote(db.Model):
             'shared_at': self.shared_at.isoformat() if self.shared_at else None,
             'hidden_by_recipient': self.hidden_by_recipient,
             'user': self.user.to_dict() if hasattr(self, 'user') and self.user else None
+        }
+
+
+class Attachment(db.Model):
+    """File attached to a note (image or audio). The binary lives on disk; this
+    row holds only metadata. Deleting a note cascades to its attachment rows;
+    the on-disk files are removed by the delete/service layer."""
+
+    __tablename__ = 'attachments'
+
+    id = db.Column(db.Integer, primary_key=True)
+    note_id = db.Column(db.Integer, db.ForeignKey('notes.id'), nullable=False)
+    uploader_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    # Sanitized name used on disk (unique per note); original name kept for display.
+    filename = db.Column(db.String(255), nullable=False)
+    original_filename = db.Column(db.String(255), nullable=True)
+    mime_type = db.Column(db.String(100), nullable=False)
+    file_size = db.Column(db.Integer, nullable=False, default=0)
+    attachment_type = db.Column(db.String(10), nullable=False)  # 'image' or 'audio'
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<Attachment {self.id}: {self.original_filename}>'
+
+    def to_dict(self):
+        """Serialize the attachment metadata to a dict. Includes a download URL."""
+        return {
+            'id': self.id,
+            'note_id': self.note_id,
+            'uploader_id': self.uploader_id,
+            'filename': self.original_filename or self.filename,
+            'mime_type': self.mime_type,
+            'file_size': self.file_size,
+            'attachment_type': self.attachment_type,
+            'url': f'/api/notes/{self.note_id}/attachments/{self.id}',
+            'created_at': self.created_at.isoformat() if self.created_at else None
         }

@@ -1,6 +1,16 @@
 import React, { useState } from 'react';
 import { Palette, Check } from 'lucide-react';
-import { NOTE_COLORS, COLOR_PICKER_GRID, getColorConfig } from '../../utils/colors';
+import { COLOR_PICKER_GRID, getColorConfig } from '../../utils/colors';
+
+/**
+ * Note color picker.
+ *
+ * Layout uses inline styles (fixed-size swatches in an explicit grid) rather
+ * than utility classes so that global mobile CSS — e.g. `.grid { width: 100% }`
+ * and broad `button` touch-target rules — cannot stretch or overlap the
+ * swatches. Keep the critical dimensions inline for that reason.
+ */
+const SWATCH = 30; // px — swatch diameter
 
 const ColorPicker = ({ currentColor = 'default', onColorChange, disabled = false }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -11,80 +21,84 @@ const ColorPicker = ({ currentColor = 'default', onColorChange, disabled = false
   };
 
   const currentColorConfig = getColorConfig(currentColor);
+  const swatches = COLOR_PICKER_GRID.flat();
 
   return (
     <div className="relative">
-      {/* Color Picker Trigger Button */}
+      {/* Trigger */}
       <button
         type="button"
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
-        className={`
-          p-2 rounded-full transition-all duration-200 
-          ${disabled 
-            ? 'opacity-50 cursor-not-allowed' 
-            : 'hover:bg-gray-100 active:bg-gray-200'
-          }
-        `}
+        className={`p-2 rounded-full transition-colors duration-200 ${
+          disabled
+            ? 'opacity-50 cursor-not-allowed'
+            : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+        }`}
         title={`Change color (current: ${currentColorConfig.name})`}
         aria-label="Change note color"
       >
-        <Palette 
-          size={18} 
-          className="text-gray-600"
-          style={{ color: currentColorConfig.icon }}
-        />
+        <Palette size={18} style={{ color: currentColorConfig.icon }} />
       </button>
 
-      {/* Color Picker Dropdown */}
       {isOpen && (
         <>
           {/* Backdrop */}
-          <div 
-            className="fixed inset-0 z-10" 
-            onClick={() => setIsOpen(false)}
-          />
-          
-          {/* Color Picker Panel */}
-          <div className="absolute top-full right-0 mt-2 z-20 bg-white rounded-lg shadow-lg border border-gray-200 p-2">
-            <div className="grid grid-cols-4 gap-1">
-              {COLOR_PICKER_GRID.flat().map((colorValue) => {
+          <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
+
+          {/* Panel */}
+          <div
+            className="absolute top-full right-0 mt-2 z-20 rounded-xl shadow-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
+            style={{ padding: 12 }}
+            role="dialog"
+            aria-label="Note color picker"
+          >
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: `repeat(4, ${SWATCH}px)`,
+                gap: 10,
+                justifyContent: 'center',
+              }}
+            >
+              {swatches.map((colorValue) => {
                 const colorConfig = getColorConfig(colorValue);
                 const isSelected = currentColor === colorValue;
-                
+
                 return (
                   <button
                     key={colorValue}
                     type="button"
                     onClick={() => handleColorSelect(colorValue)}
-                    className={`
-                      w-8 h-8 rounded-full border-2 transition-all duration-150
-                      hover:scale-110 active:scale-95 relative
-                      ${isSelected 
-                        ? 'border-gray-800 shadow-md' 
-                        : 'border-gray-300 hover:border-gray-400'
-                      }
-                    `}
-                    style={{ 
-                      backgroundColor: colorConfig.background,
-                      borderColor: isSelected ? '#374151' : colorConfig.border
-                    }}
                     title={`${colorConfig.name} color`}
                     aria-label={`Change to ${colorConfig.name} color`}
+                    aria-pressed={isSelected}
+                    style={{
+                      width: SWATCH,
+                      height: SWATCH,
+                      minWidth: SWATCH,
+                      minHeight: SWATCH,
+                      flex: 'none',
+                      padding: 0,
+                      borderRadius: '9999px',
+                      backgroundColor: colorConfig.background,
+                      border: `2px solid ${isSelected ? '#3b82f6' : colorConfig.border}`,
+                      boxShadow: isSelected ? '0 0 0 2px rgba(59,130,246,0.35)' : 'none',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'transform 0.12s ease, box-shadow 0.12s ease',
+                    }}
                   >
-                    {isSelected && (
-                      <Check 
-                        size={14} 
-                        className="absolute inset-0 m-auto text-gray-700" 
-                      />
-                    )}
+                    {isSelected && <Check size={16} style={{ color: '#1f2937' }} strokeWidth={3} />}
                   </button>
                 );
               })}
             </div>
-            
-            {/* Color name display */}
-            <div className="mt-2 text-xs text-gray-600 text-center">
+
+            {/* Current color name */}
+            <div className="mt-3 text-xs text-center text-gray-600 dark:text-gray-300">
               {currentColorConfig.name}
             </div>
           </div>

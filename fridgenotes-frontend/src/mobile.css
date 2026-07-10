@@ -37,10 +37,33 @@ html {
     width: 100%;
     max-width: 100%;
   }
-  
+
   /* Prevent elements from extending beyond viewport */
   .flex {
     min-width: 0;
+  }
+
+  /* Overlays (popovers, dropdown menus, dialogs) manage their own compact
+     layout. Exclude their contents from the broad mobile grid/touch-target
+     rules in this file, which are meant for the main app chrome and would
+     otherwise stretch or resize small controls — e.g. the color-picker swatch
+     grid, which previously overflowed and overlapped. These descendant
+     selectors outrank the broad rules regardless of source order. */
+  [role="dialog"] .grid,
+  [role="menu"] .grid,
+  [data-radix-popper-content-wrapper] .grid {
+    width: auto;
+    max-width: none;
+  }
+
+  [role="dialog"] button.h-6,
+  [role="menu"] button.h-6,
+  [data-radix-popper-content-wrapper] button.h-6,
+  [role="dialog"] button:has(.size-4),
+  [role="menu"] button:has(.size-4),
+  [data-radix-popper-content-wrapper] button:has(.size-4) {
+    min-width: 0;
+    min-height: 0;
   }
 
   /* Header spacing fix */

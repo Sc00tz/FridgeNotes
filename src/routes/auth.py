@@ -1,5 +1,7 @@
 """Blueprint for authentication endpoints: register, login, logout, and admin user management."""
 
+import os
+
 from flask import Blueprint, jsonify, request
 from flask_login import login_user, logout_user, login_required, current_user
 from src.models.user import User, db
@@ -7,10 +9,23 @@ from src.limiter import limiter
 
 auth_bp = Blueprint('auth', __name__)
 
+
+def registration_enabled():
+    """Return True if public self-registration is enabled via ALLOW_REGISTRATION.
+
+    Disabled by default; admins create accounts through the admin panel. Set
+    ALLOW_REGISTRATION to a truthy value (1/true/yes/on) to allow self-signup.
+    """
+    return os.environ.get('ALLOW_REGISTRATION', '').strip().lower() in ('1', 'true', 'yes', 'on')
+
+
 @auth_bp.route('/register', methods=['POST'])
 @limiter.limit('10 per hour')
 def register():
     """Register a new user and log them in automatically."""
+    if not registration_enabled():
+        return jsonify({'error': 'Public registration is disabled'}), 403
+
     data = request.json
 
     if not data.get('username') or not data.get('email') or not data.get('password'):
@@ -99,21 +114,24 @@ def get_current_user():
 
 @auth_bp.route('/check', methods=['GET'])
 def check_auth():
-    """Return authentication status for the current session."""
+    """Return authentication status for the current session and server auth config."""
     if current_user.is_authenticated:
         return jsonify({
             'authenticated': True,
-            'user': current_user.to_dict()
+            'user': current_user.to_dict(),
+            'registration_enabled': registration_enabled()
         })
     else:
         return jsonify({
             'authenticated': False,
-            'user': None
+            'user': None,
+            'registration_enabled': registration_enabled()
         })
 
 
 @auth_bp.route('/change-password', methods=['POST'])
 @login_required
+@limiter.limit('10 per hour')
 def change_password():
     """Change the current user's password."""
     data = request.json
@@ -121,8 +139,8 @@ def change_password():
     if not data.get('current_password') or not data.get('new_password'):
         return jsonify({'error': 'Current password and new password are required'}), 400
 
-    if len(data['new_password']) < 6:
-        return jsonify({'error': 'New password must be at least 6 characters long'}), 400
+    if len(data['new_password']) < 8:
+        return jsonify({'error': 'New password must be at least 8 characters long'}), 400
 
     if not current_user.check_password(data['current_password']):
         return jsonify({'error': 'Current password is incorrect'}), 401
@@ -135,21 +153,6 @@ def change_password():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': 'Failed to change password'}), 500
-
-
-@auth_bp.route('/forgot-password', methods=['POST'])
-def forgot_password():
-    """Request a password reset (returns success regardless to prevent email enumeration)."""
-    data = request.json
-
-    if not data.get('email'):
-        return jsonify({'error': 'Email is required'}), 400
-
-    User.get_by_email(data['email'])
-
-    return jsonify({
-        'message': 'If an account with that email exists, password reset instructions have been sent'
-    })
 
 
 @auth_bp.route('/admin/users', methods=['GET'])

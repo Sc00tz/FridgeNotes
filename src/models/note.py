@@ -181,3 +181,28 @@ class Attachment(db.Model):
             'url': f'/api/notes/{self.note_id}/attachments/{self.id}',
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
+
+
+class DeletedNote(db.Model):
+    """Tombstone recording that a note was deleted, per affected user.
+
+    Delta-sync (GET /api/sync) returns these so a client that was offline when
+    a note was deleted learns to drop it locally. One row is written per user
+    who had access at delete time (owner + share recipients), because access is
+    otherwise gone once the note row is removed.
+    """
+
+    __tablename__ = 'deleted_notes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    note_id = db.Column(db.Integer, nullable=False)  # not an FK: the note is gone
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    deleted_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (db.Index('idx_deleted_notes_user_deleted', 'user_id', 'deleted_at'),)
+
+    def to_dict(self):
+        return {
+            'note_id': self.note_id,
+            'deleted_at': self.deleted_at.strftime('%Y-%m-%dT%H:%M:%S') if self.deleted_at else None,
+        }

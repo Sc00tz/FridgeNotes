@@ -93,6 +93,69 @@ def get_notes_for_user(user_id):
     return [note.to_dict(current_user_id=user_id) for note in notes_query]
 
 
+def _user_notes_access_filter(user_id):
+    """SQLAlchemy filter matching notes a user can see (owned or shared, not hidden)."""
+    return or_(
+        Note.user_id == user_id,
+        Note.shared_notes.any(
+            and_(
+                SharedNote.user_id == user_id,
+                SharedNote.hidden_by_recipient == False
+            )
+        )
+    )
+
+
+def get_changes_for_user(user_id, since):
+    """Return notes changed and notes deleted for a user since a timestamp.
+
+    Args:
+        user_id: The user syncing.
+        since: A naive-UTC datetime; only rows changed strictly after this are
+            returned. If None, all accessible notes are returned (initial sync).
+
+    Returns:
+        dict with 'changed' (list of note dicts), 'deleted' (list of note ids),
+        and 'server_time' (ISO string) the client should store as its next
+        'since' cursor.
+    """
+    from src.models.note import DeletedNote
+    from datetime import datetime
+
+    # Capture the cursor BEFORE querying. A row updated in the tiny window
+    # between now and the query runs would then be re-sent on the next sync
+    # (a harmless duplicate) rather than being missed entirely.
+    server_time = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')
+
+    changed_query = db.session.query(Note).options(
+        selectinload(Note.checklist_items),
+        joinedload(Note.labels),
+        selectinload(Note.shared_notes),
+        selectinload(Note.attachments),
+    ).filter(_user_notes_access_filter(user_id))
+
+    if since is not None:
+        changed_query = changed_query.filter(Note.updated_at > since)
+
+    changed = changed_query.order_by(Note.pinned.desc(), Note.position.asc()).all()
+
+    deleted_ids = []
+    if since is not None:
+        # Tombstones only matter for incremental syncs; on a full sync the
+        # absence of a note is enough for the client to know it's gone.
+        deleted_rows = db.session.query(DeletedNote.note_id).filter(
+            DeletedNote.user_id == user_id,
+            DeletedNote.deleted_at > since,
+        ).all()
+        deleted_ids = [row[0] for row in deleted_rows]
+
+    return {
+        'changed': [note.to_dict(current_user_id=user_id) for note in changed],
+        'deleted': deleted_ids,
+        'server_time': server_time,
+    }
+
+
 def _get_notes_for_user_legacy(user_id):
     """Fallback note query for older database schemas missing hidden_by_recipient."""
     own_notes = Note.query.options(
@@ -209,9 +272,25 @@ def update_note(note_id, current_user_id, data):
             raise PermissionError('Access denied')
 
         # Shared users with 'read' access can only archive/unarchive.
-        is_archive_only = set(data.keys()) <= {'archived'}
+        is_archive_only = set(data.keys()) <= {'archived', 'base_updated_at'}
         if not is_archive_only and shared_note.access_level != 'edit':
             raise PermissionError('Access denied - edit permission required')
+
+    # Optimistic-concurrency check: if the client tells us which version its
+    # edit was based on (base_updated_at) and the note has changed since, reject
+    # so the caller can reconcile instead of silently clobbering the newer edit.
+    # Opt-in: updates without base_updated_at are unaffected.
+    base_updated_at = data.get('base_updated_at')
+    if base_updated_at and note.updated_at:
+        base = parse_iso_datetime(base_updated_at)
+        # Compare at second resolution: to_dict serializes updated_at without
+        # microseconds, so a client echoing that value must not false-conflict.
+        if base and note.updated_at.replace(microsecond=0) > base.replace(microsecond=0):
+            from src.exceptions import ConflictError
+            raise ConflictError(
+                'Note was modified elsewhere',
+                current=note.to_dict(current_user_id=current_user_id),
+            )
 
     note.title = data.get('title', note.title)
     note.content = data.get('content', note.content)
@@ -290,6 +369,12 @@ def delete_note(note_id, current_user_id):
     # Collect affected user IDs before deleting (relationships unavailable after commit).
     from src.websocket_events import _get_shared_user_ids
     affected_user_ids = _get_shared_user_ids(note_id)
+
+    # Write a tombstone per affected user so clients that were offline during
+    # the delete can discover it via delta-sync (GET /api/sync).
+    from src.models.note import DeletedNote
+    for uid in affected_user_ids:
+        db.session.add(DeletedNote(note_id=note_id, user_id=uid))
 
     db.session.delete(note)
     db.session.commit()

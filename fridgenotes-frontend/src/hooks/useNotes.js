@@ -27,6 +27,9 @@ export const useNotes = (currentUser, isAuthenticated) => {
   // a dependency (which would cause the effect to re-run on every update).
   const joinedRoomsRef = useRef(new Set());
   const notesRef = useRef([]);
+  // Delta-sync cursor (server_time from the last sync); drives incremental
+  // catch-up syncs on reconnect.
+  const syncCursorRef = useRef(null);
 
   const showError = useCallback((message) => {
     setError(message);
@@ -43,19 +46,6 @@ export const useNotes = (currentUser, isAuthenticated) => {
   useEffect(() => {
     notesRef.current = notes;
   }, [notes]);
-
-  // When an offline-created note syncs, replace the optimistic entry (keyed by
-  // its client_id) with the real server note so local state matches the server.
-  useEffect(() => {
-    offlineSync.setOnNoteIdResolved((clientId, serverNote) => {
-      setNotes(prevNotes => {
-        const withoutDupe = prevNotes.filter(n => n.id !== serverNote.id);
-        return withoutDupe.map(n =>
-          (n.id === clientId || n.client_id === clientId) ? serverNote : n
-        );
-      });
-    });
-  }, [offlineSync]);
 
   const handleNoteUpdate = useCallback((data) => {
     if (data.update_type === 'deleted') {
@@ -123,12 +113,15 @@ export const useNotes = (currentUser, isAuthenticated) => {
 
     try {
       setLoading(true);
-      const userNotes = await apiClient.getNotes();
+      // Initial load is a full delta-sync (no cursor): returns all accessible
+      // notes plus a server_time cursor for subsequent incremental syncs.
+      const result = await apiClient.getChanges();
       // Defensively coerce to an array: a non-array response (e.g. an error
       // object) would otherwise crash downstream .filter/.map calls and blank
       // the entire app instead of surfacing a recoverable error.
-      const notesArray = Array.isArray(userNotes) ? userNotes : [];
+      const notesArray = Array.isArray(result?.changed) ? result.changed : [];
       setNotes(notesArray);
+      if (result?.server_time) syncCursorRef.current = result.server_time;
       return notesArray;
     } catch (error) {
       showError('Failed to load notes: ' + error.message);
@@ -137,6 +130,73 @@ export const useNotes = (currentUser, isAuthenticated) => {
       setLoading(false);
     }
   }, [isAuthenticated, currentUser, showError]);
+
+  // Incremental delta-sync: fetch only what changed/was deleted since the last
+  // cursor, merge changed notes and drop tombstoned ones. Used on reconnect so
+  // a client that was offline catches up cheaply instead of refetching all.
+  const deltaSync = useCallback(async () => {
+    if (!isAuthenticated || !currentUser) return;
+    const since = syncCursorRef.current;
+    if (!since) return loadNotes(); // no cursor yet -> full load
+
+    try {
+      const result = await apiClient.getChanges(since);
+      const changed = Array.isArray(result?.changed) ? result.changed : [];
+      const deleted = Array.isArray(result?.deleted) ? result.deleted : [];
+
+      if (changed.length || deleted.length) {
+        const deletedSet = new Set(deleted);
+        const changedById = new Map(changed.map(n => [n.id, n]));
+        setNotes(prevNotes => {
+          // Drop tombstoned notes and replace changed ones in place; append
+          // notes that are new to this client.
+          const merged = prevNotes
+            .filter(n => !deletedSet.has(n.id))
+            .map(n => (changedById.has(n.id) ? changedById.get(n.id) : n));
+          const existingIds = new Set(merged.map(n => n.id));
+          for (const n of changed) {
+            if (!existingIds.has(n.id)) merged.unshift(n);
+          }
+          return merged;
+        });
+      }
+      if (result?.server_time) syncCursorRef.current = result.server_time;
+    } catch (error) {
+      // Non-fatal: a failed catch-up sync shouldn't disrupt the session.
+      console.error('Delta sync failed:', error);
+    }
+  }, [isAuthenticated, currentUser, loadNotes]);
+
+  // Register offline-sync reconciliation callbacks. Placed after deltaSync is
+  // defined so it can be referenced here.
+  useEffect(() => {
+    // When an offline-created note syncs, replace the optimistic entry (keyed
+    // by client_id) with the real server note so local state matches.
+    offlineSync.setOnNoteIdResolved((clientId, serverNote) => {
+      setNotes(prevNotes => {
+        const withoutDupe = prevNotes.filter(n => n.id !== serverNote.id);
+        return withoutDupe.map(n =>
+          (n.id === clientId || n.client_id === clientId) ? serverNote : n
+        );
+      });
+    });
+
+    // On a sync conflict (409), server-wins: adopt the server's current version
+    // locally and tell the user their offline edit to this note was superseded.
+    offlineSync.setOnConflict((operation, currentServerNote) => {
+      if (currentServerNote) {
+        setNotes(prevNotes =>
+          prevNotes.map(n => (n.id === currentServerNote.id ? currentServerNote : n))
+        );
+      }
+      const title = currentServerNote?.title || 'a note';
+      showError(`Your offline change to "${title}" was replaced by a newer edit from another device.`);
+    });
+
+    // After the offline queue flushes on reconnect, pull in changes made on
+    // other devices via an incremental delta-sync.
+    offlineSync.setOnSyncComplete(() => deltaSync());
+  }, [offlineSync, deltaSync, showError]);
 
   // Removed handler functions from the dependency array intentionally — they
   // are stable useCallback refs and including them would cause the socket to
@@ -254,6 +314,14 @@ export const useNotes = (currentUser, isAuthenticated) => {
         noteData = updatedNote;
       }
 
+      // Attach base_updated_at (the version this edit is based on) so the
+      // server can detect a concurrent change and reject with 409 rather than
+      // silently clobbering it. Sourced from current local state.
+      const base = notesRef.current.find(n => n.id === noteId);
+      if (base?.updated_at && !noteData.base_updated_at) {
+        noteData = { ...noteData, base_updated_at: base.updated_at };
+      }
+
       const savedNote = await apiClient.updateNote(noteId, noteData);
       setNotes(prevNotes =>
         prevNotes.map(note => note.id === savedNote.id ? savedNote : note)
@@ -265,6 +333,17 @@ export const useNotes = (currentUser, isAuthenticated) => {
 
       return savedNote;
     } catch (error) {
+      // Concurrent-edit conflict: server-wins. Adopt the server's current
+      // version locally and tell the user their edit was superseded.
+      if (error.status === 409) {
+        if (error.current) {
+          setNotes(prevNotes =>
+            prevNotes.map(note => note.id === error.current.id ? error.current : note)
+          );
+        }
+        showError('This note was changed elsewhere; your edit was not saved. Showing the latest version.');
+        return error.current || null;
+      }
       showError('Failed to update note: ' + error.message);
       throw error;
     }

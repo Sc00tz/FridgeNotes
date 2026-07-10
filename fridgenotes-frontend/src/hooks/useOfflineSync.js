@@ -40,6 +40,20 @@ export const useOfflineSync = (api, currentUser) => {
     onNoteIdResolvedRef.current = fn;
   }, []);
 
+  // Fired when a queued op is rejected with a 409 (server-wins). Receives
+  // (operation, currentServerNote) so the consumer can reconcile and notify.
+  const onConflictRef = useRef(null);
+  const setOnConflict = useCallback((fn) => {
+    onConflictRef.current = fn;
+  }, []);
+
+  // Fired after the queue finishes flushing, so the consumer can run a
+  // catch-up delta-sync to pick up changes made on other devices.
+  const onSyncCompleteRef = useRef(null);
+  const setOnSyncComplete = useCallback((fn) => {
+    onSyncCompleteRef.current = fn;
+  }, []);
+
   const storageKey = currentUser ? `${STORAGE_KEY_PREFIX}${currentUser.id}` : null;
 
   useEffect(() => {
@@ -159,6 +173,13 @@ export const useOfflineSync = (api, currentUser) => {
 
       return { success: true, result };
     } catch (error) {
+      // A 409 means the note changed on the server since this offline edit was
+      // based on it. Retrying would just conflict again, so treat it as a
+      // terminal conflict (server-wins) and hand the server's current state
+      // back to the caller to reconcile — not a retryable failure.
+      if (error.status === 409) {
+        return { success: false, conflict: true, current: error.current || null, error: error.message };
+      }
       console.error(`Failed to execute operation ${operation.id}:`, error);
       return { success: false, error: error.message };
     }
@@ -212,6 +233,15 @@ export const useOfflineSync = (api, currentUser) => {
               }
             }
           }
+        } else if (result.conflict) {
+          // Terminal conflict (server-wins): drop the op (don't requeue) and
+          // let the consumer reconcile local state to the server's version.
+          results.conflicts = (results.conflicts || 0) + 1;
+          try {
+            onConflictRef.current?.(operation, result.current);
+          } catch (cbError) {
+            console.error('Error in onConflict callback:', cbError);
+          }
         } else {
           results.failed++;
           results.errors.push({
@@ -232,6 +262,14 @@ export const useOfflineSync = (api, currentUser) => {
       saveSyncQueue(remainingQueue);
       setLastSync(new Date().toISOString());
       setSyncErrors(results.errors);
+
+      // After flushing our queued writes, let the consumer run a catch-up
+      // delta-sync to pull in changes made on other devices while offline.
+      try {
+        await onSyncCompleteRef.current?.(results);
+      } catch (cbError) {
+        console.error('Error in onSyncComplete callback:', cbError);
+      }
 
       if (remainingQueue.length > 0 && retryCountRef.current < MAX_RETRY_ATTEMPTS) {
         retryCountRef.current++;
@@ -348,6 +386,8 @@ export const useOfflineSync = (api, currentUser) => {
     forceSync,
     clearSyncQueue,
     setOnNoteIdResolved,
+    setOnConflict,
+    setOnSyncComplete,
 
     queueOperation,
     getSyncQueue: () => getSyncQueue().length,

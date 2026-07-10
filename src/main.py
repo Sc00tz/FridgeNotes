@@ -21,7 +21,7 @@ from flask_login import LoginManager
 # Import models in the correct order to avoid circular imports
 from src.models.user import db, User
 # Import note models AFTER user model is loaded
-from src.models.note import Note, ChecklistItem, SharedNote, Attachment
+from src.models.note import Note, ChecklistItem, SharedNote, Attachment, DeletedNote
 # Import label models
 from src.models.label import Label, NoteLabel
 

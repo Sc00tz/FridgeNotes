@@ -21,6 +21,8 @@ class User(UserMixin, db.Model):
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime)
+    # Hashed PIN used to unlock private notes (nullable = no PIN set yet).
+    private_pin_hash = db.Column(db.String(255), nullable=True)
 
     notes = db.relationship('Note', backref='user', lazy=True, cascade='all, delete-orphan')
     shared_notes = db.relationship('SharedNote', backref='user', lazy=True, cascade='all, delete-orphan')
@@ -40,6 +42,21 @@ class User(UserMixin, db.Model):
         """Check if the provided password matches the user's password."""
         return check_password_hash(self.password_hash, password)
 
+    def set_private_pin(self, pin):
+        """Hash and set the user's private-notes PIN."""
+        self.private_pin_hash = generate_password_hash(str(pin))
+
+    def check_private_pin(self, pin):
+        """Check the provided PIN against the stored private-notes PIN."""
+        if not self.private_pin_hash:
+            return False
+        return check_password_hash(self.private_pin_hash, str(pin))
+
+    @property
+    def has_private_pin(self):
+        """Whether the user has set a private-notes PIN."""
+        return bool(self.private_pin_hash)
+
     def update_last_login(self):
         """Update the user's last login timestamp."""
         self.last_login = datetime.utcnow()
@@ -53,6 +70,7 @@ class User(UserMixin, db.Model):
             'email': self.email,
             'is_admin': self.is_admin,
             'is_active': self.is_active,
+            'has_private_pin': self.has_private_pin,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'last_login': self.last_login.isoformat() if self.last_login else None
         }

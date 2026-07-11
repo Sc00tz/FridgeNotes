@@ -1144,6 +1144,64 @@ def run_migration_012_create_deleted_notes_table():
             conn.close()
 
 
+def run_migration_013_add_private_notes():
+    """Migration 013: Add notes.is_private and users.private_pin_hash for PIN-gated notes."""
+    migration_name = "013_add_private_notes"
+    db_path = get_db_path()
+
+    db_dir = os.path.dirname(db_path)
+    if db_dir and not os.path.exists(db_dir):
+        try:
+            os.makedirs(db_dir, exist_ok=True)
+            print(f"Created database directory: {db_dir}")
+        except Exception as e:
+            print(f"Warning: Could not create database directory {db_dir}: {e}")
+
+    if not os.path.exists(db_path):
+        print(f"Database not found at {db_path}, will be created when app starts")
+        return True
+
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        create_migration_table(cursor)
+
+        if is_migration_applied(cursor, migration_name):
+            print(f"✅ Migration {migration_name} already applied")
+            return True
+
+        print(f"📝 Running Migration {migration_name}: Adding private-notes fields...")
+
+        if check_table_exists(cursor, 'notes') and not check_column_exists(cursor, 'notes', 'is_private'):
+            cursor.execute("ALTER TABLE notes ADD COLUMN is_private BOOLEAN NOT NULL DEFAULT 0")
+            print("   - Added notes.is_private")
+        if check_table_exists(cursor, 'users') and not check_column_exists(cursor, 'users', 'private_pin_hash'):
+            cursor.execute("ALTER TABLE users ADD COLUMN private_pin_hash VARCHAR(255) NULL")
+            print("   - Added users.private_pin_hash")
+
+        mark_migration_applied(cursor, migration_name)
+        conn.commit()
+        print(f"✅ Migration {migration_name} completed successfully!")
+        print("   - PIN-gated private notes are now supported!")
+        return True
+
+    except sqlite3.Error as e:
+        print(f"❌ Migration {migration_name} failed: {e}")
+        if conn:
+            conn.rollback()
+        return False
+    except Exception as e:
+        print(f"❌ Unexpected error in Migration {migration_name}: {e}")
+        if conn:
+            conn.rollback()
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
 def run_all_migrations():
     """Run all pending migrations"""
     print("🚀 Starting automatic database migrations...")
@@ -1176,6 +1234,7 @@ def run_all_migrations():
         run_migration_010_create_attachments_table, # NEW: Create attachments table for file uploads
         run_migration_011_add_note_client_id, # NEW: Add client_id for idempotent offline creation
         run_migration_012_create_deleted_notes_table, # NEW: Tombstones for delta-sync
+        run_migration_013_add_private_notes, # NEW: PIN-gated private notes
         # Add future migrations here
     ]
     

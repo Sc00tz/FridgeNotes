@@ -21,6 +21,9 @@ class Note(db.Model):
     position = db.Column(db.Integer, nullable=False, default=0)
     pinned = db.Column(db.Boolean, nullable=False, default=False)
     archived = db.Column(db.Boolean, default=False)
+    # Private notes are PIN-gated: list/sync return the title but withhold the
+    # content/items/attachments until the user unlocks the note with their PIN.
+    is_private = db.Column(db.Boolean, nullable=False, default=False)
     reminder_datetime = db.Column(db.DateTime, nullable=True)
     reminder_completed = db.Column(db.Boolean, default=False)
     reminder_snoozed_until = db.Column(db.DateTime, nullable=True)
@@ -43,19 +46,27 @@ class Note(db.Model):
     def __repr__(self):
         return f'<Note {self.id}: {self.title}>'
 
-    def to_dict(self, current_user_id=None):
-        """Serialize the note to a dict, optionally including per-user sharing details."""
+    def to_dict(self, current_user_id=None, redact=False):
+        """Serialize the note to a dict, optionally including per-user sharing details.
+
+        When ``redact`` is True (a private note the caller hasn't unlocked), the
+        title and metadata are returned but the content, checklist items, and
+        attachments are withheld so locked notes appear in lists without leaking
+        their contents.
+        """
         result = {
             'id': self.id,
             'client_id': self.client_id,
             'user_id': self.user_id,
             'title': self.title,
-            'content': self.content,
+            'content': None if redact else self.content,
             'note_type': self.note_type,
             'color': self.color,
             'position': self.position,
             'pinned': self.pinned,
             'archived': self.archived,
+            'is_private': self.is_private,
+            'is_locked': redact,  # true means content was withheld pending unlock
             'reminder_datetime': self.reminder_datetime.strftime('%Y-%m-%dT%H:%M:%S') if self.reminder_datetime else None,
             'reminder_completed': self.reminder_completed,
             'reminder_snoozed_until': self.reminder_snoozed_until.strftime('%Y-%m-%dT%H:%M:%S') if self.reminder_snoozed_until else None,
@@ -65,9 +76,9 @@ class Note(db.Model):
             'reminder_location_name': self.reminder_location_name,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
-            'checklist_items': [item.to_dict() for item in self.checklist_items] if self.note_type == 'checklist' else [],
+            'checklist_items': [] if redact else ([item.to_dict() for item in self.checklist_items] if self.note_type == 'checklist' else []),
             'labels': [label.to_dict() for label in self.labels],
-            'attachments': [attachment.to_dict() for attachment in self.attachments]
+            'attachments': [] if redact else [attachment.to_dict() for attachment in self.attachments]
         }
 
         if current_user_id:

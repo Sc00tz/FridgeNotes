@@ -118,15 +118,46 @@ def create_new_note():
 @note_bp.route('/notes/<int:note_id>', methods=['GET'])
 @login_required
 def get_single_note(note_id):
-    """Return a single note by ID, checking ownership or share access."""
+    """Return a single note by ID, checking ownership or share access.
+
+    Private notes are returned redacted (title only, content withheld); use
+    POST /notes/<id>/unlock with the PIN to retrieve full content.
+    """
     note = Note.query.get_or_404(note_id)
 
     if note.user_id != current_user.id:
         shared_note = SharedNote.query.filter_by(note_id=note_id, user_id=current_user.id).first()
         if not shared_note:
             return jsonify({'error': 'Access denied'}), 403
-    
-    return jsonify(note.to_dict(current_user_id=current_user.id))
+
+    return jsonify(note.to_dict(current_user_id=current_user.id, redact=note.is_private))
+
+
+@note_bp.route('/notes/<int:note_id>/unlock', methods=['POST'])
+@login_required
+@limiter.limit('20 per minute')
+def unlock_note(note_id):
+    """Return a private note's full content if the provided PIN verifies.
+
+    Per-note unlock: the PIN is checked on every call and nothing is persisted
+    server-side, so each open re-verifies. Rate-limited to deter brute force.
+    """
+    note = Note.query.get_or_404(note_id)
+
+    if note.user_id != current_user.id:
+        shared_note = SharedNote.query.filter_by(note_id=note_id, user_id=current_user.id).first()
+        if not shared_note:
+            return jsonify({'error': 'Access denied'}), 403
+
+    if not current_user.has_private_pin:
+        return jsonify({'error': 'No PIN set'}), 400
+
+    data = request.json or {}
+    if not current_user.check_private_pin(data.get('pin', '')):
+        return jsonify({'error': 'Incorrect PIN'}), 401
+
+    # PIN verified — return the full (unredacted) note.
+    return jsonify(note.to_dict(current_user_id=current_user.id, redact=False))
 
 @note_bp.route('/notes/<int:note_id>', methods=['PUT'])
 @login_required

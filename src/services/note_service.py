@@ -90,7 +90,7 @@ def get_notes_for_user(user_id):
         logger.warning("Error in optimized query, falling back to legacy method: %s", e)
         return _get_notes_for_user_legacy(user_id)
 
-    return [note.to_dict(current_user_id=user_id) for note in notes_query]
+    return [note.to_dict(current_user_id=user_id, redact=note.is_private) for note in notes_query]
 
 
 def _user_notes_access_filter(user_id):
@@ -150,7 +150,7 @@ def get_changes_for_user(user_id, since):
         deleted_ids = [row[0] for row in deleted_rows]
 
     return {
-        'changed': [note.to_dict(current_user_id=user_id) for note in changed],
+        'changed': [note.to_dict(current_user_id=user_id, redact=note.is_private) for note in changed],
         'deleted': deleted_ids,
         'server_time': server_time,
     }
@@ -176,7 +176,7 @@ def _get_notes_for_user_legacy(user_id):
 
     all_notes = {note.id: note for note in own_notes + shared_notes_query}
 
-    return [note.to_dict(current_user_id=user_id) for note in all_notes.values()]
+    return [note.to_dict(current_user_id=user_id, redact=note.is_private) for note in all_notes.values()]
 
 
 def create_note(user_id, data):
@@ -208,7 +208,8 @@ def create_note(user_id, data):
         content=data.get('content', ''),
         note_type=data.get('note_type', 'text'),
         color=data.get('color', 'default'),
-        position=next_position
+        position=next_position,
+        is_private=bool(data.get('is_private', False))
     )
 
     # Reminder fields may be set at creation time, not just via update.
@@ -297,6 +298,8 @@ def update_note(note_id, current_user_id, data):
     note.color = data.get('color', note.color)
     note.pinned = data.get('pinned', note.pinned)
     note.archived = data.get('archived', note.archived)
+    if 'is_private' in data:
+        note.is_private = bool(data['is_private'])
 
     if 'reminder_datetime' in data:
         note.reminder_datetime = parse_iso_datetime(data['reminder_datetime'])

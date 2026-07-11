@@ -155,6 +155,53 @@ def change_password():
         return jsonify({'error': 'Failed to change password'}), 500
 
 
+def _valid_pin(pin):
+    """A PIN must be 4-12 digits."""
+    return isinstance(pin, str) and pin.isdigit() and 4 <= len(pin) <= 12
+
+
+@auth_bp.route('/private-pin', methods=['POST'])
+@login_required
+@limiter.limit('20 per hour')
+def set_private_pin():
+    """Set or change the current user's private-notes PIN.
+
+    Setting the first PIN requires the account password. Changing an existing
+    PIN requires the current PIN (or the account password as a recovery path).
+    """
+    data = request.json or {}
+    new_pin = data.get('new_pin')
+
+    if not _valid_pin(new_pin):
+        return jsonify({'error': 'PIN must be 4-12 digits'}), 400
+
+    # Authorize the change: password always works; current PIN works if one is set.
+    authorized = False
+    if data.get('password') and current_user.check_password(data['password']):
+        authorized = True
+    elif current_user.has_private_pin and data.get('current_pin') and current_user.check_private_pin(data['current_pin']):
+        authorized = True
+
+    if not authorized:
+        msg = 'Current PIN or account password required' if current_user.has_private_pin else 'Account password required to set a PIN'
+        return jsonify({'error': msg}), 401
+
+    try:
+        current_user.set_private_pin(new_pin)
+        db.session.commit()
+        return jsonify({'message': 'PIN set successfully', 'has_private_pin': True})
+    except Exception:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to set PIN'}), 500
+
+
+@auth_bp.route('/private-pin', methods=['GET'])
+@login_required
+def private_pin_status():
+    """Return whether the current user has a private-notes PIN set."""
+    return jsonify({'has_private_pin': current_user.has_private_pin})
+
+
 @auth_bp.route('/admin/users', methods=['GET'])
 @login_required
 def admin_get_users():

@@ -38,6 +38,9 @@ import ReminderBadge from '../reminders/ReminderBadge';
 import LocationPicker from '../reminders/LocationPicker';
 import AttachmentList from './AttachmentList';
 import ChecklistItemAutocomplete from './ChecklistItemAutocomplete';
+import PinDialog from './PinDialog';
+import { Lock, Unlock } from 'lucide-react';
+import apiClient from '../../lib/api';
 import './NoteCard.css';
 
 
@@ -62,9 +65,24 @@ const NoteCard = ({
   const [newChecklistItem, setNewChecklistItem] = useState('');
   const [showCompleted, setShowCompleted] = useState(true);
 
+  // Private-notes state: the server sends locked notes redacted (is_locked).
+  // After the user unlocks, we hold the full note here and render from it.
+  const [unlockedContent, setUnlockedContent] = useState(null);
+  const [pinDialog, setPinDialog] = useState(null); // 'unlock' | 'setup' | null
+  const isLocked = note.is_locked && !unlockedContent;
+
+  // The note whose content we render: the unlocked full version if we have it,
+  // otherwise the (possibly redacted) note from props.
+  const effectiveNote = unlockedContent || note;
+
   useEffect(() => {
-    setEditedNote(note);
-  }, [note]);
+    setEditedNote(unlockedContent || note);
+  }, [note, unlockedContent]);
+
+  // If the note prop changes identity (e.g. re-fetch), drop any stale unlock.
+  useEffect(() => {
+    setUnlockedContent(null);
+  }, [note.id]);
 
   const handleSave = () => {
     onUpdate(editedNote);
@@ -160,6 +178,30 @@ const NoteCard = ({
     if (onPinToggle) {
       onPinToggle(note.id, !note.pinned);
     }
+  };
+
+  // Toggle a note's private flag. Making a note private the first time requires
+  // a PIN to exist — if none is set, prompt to create one first.
+  const handleTogglePrivate = async () => {
+    if (!note.is_private) {
+      const { has_private_pin } = await apiClient.getPrivatePinStatus().catch(() => ({ has_private_pin: false }));
+      if (!has_private_pin) {
+        setPinDialog('setup');
+        return;
+      }
+      onUpdate({ ...note, is_private: true });
+    } else {
+      // Making public: content must be available. If locked, unlock first.
+      if (note.is_locked && !unlockedContent) {
+        setPinDialog('unlock');
+        return;
+      }
+      onUpdate({ ...effectiveNote, is_private: false });
+    }
+  };
+
+  const handleUnlocked = (fullNote) => {
+    setUnlockedContent(fullNote);
   };
 
   // Separate active and completed items
@@ -258,6 +300,19 @@ const NoteCard = ({
                     Hide from my view
                   </DropdownMenuItem>
                 )}
+                <DropdownMenuItem onClick={handleTogglePrivate}>
+                  {note.is_private ? (
+                    <>
+                      <Unlock className="h-4 w-4 mr-2" />
+                      Make public
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="h-4 w-4 mr-2" />
+                      Make private
+                    </>
+                  )}
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onUpdate({ ...note, archived: !note.archived })}>
                   {note.archived ? (
                     <>
@@ -311,7 +366,20 @@ const NoteCard = ({
       </CardHeader>
 
       <CardContent className="pt-0">
-        {note.note_type === 'text' ? (
+        {isLocked ? (
+          /* Locked private note: title is shown (in the header); content is
+             withheld until the user unlocks with their PIN. */
+          <div className="flex flex-col items-center justify-center py-6 gap-3">
+            <Lock className="h-8 w-8 opacity-40" style={{ color: colorConfig.text }} />
+            <span className="text-sm opacity-70" style={{ color: colorConfig.text }}>
+              This note is private
+            </span>
+            <Button variant="outline" size="sm" onClick={() => setPinDialog('unlock')}>
+              <Unlock className="h-4 w-4 mr-2" />
+              Unlock
+            </Button>
+          </div>
+        ) : note.note_type === 'text' ? (
           /* Text Note */
           isEditing ? (
             <Textarea
@@ -464,12 +532,14 @@ const NoteCard = ({
           </div>
         )}
 
-        {/* Attachments - images and voice memos (shown in view and edit) */}
-        <AttachmentList
-          noteId={note.id}
-          attachments={note.attachments || []}
-          isEditing={isEditing}
-        />
+        {/* Attachments - images and voice memos (hidden while locked) */}
+        {!isLocked && (
+          <AttachmentList
+            noteId={note.id}
+            attachments={effectiveNote.attachments || []}
+            isEditing={isEditing}
+          />
+        )}
 
         {/* Reminder - Show ReminderPicker when editing, ReminderBadge when viewing */}
         {isEditing ? (
@@ -522,13 +592,35 @@ const NoteCard = ({
           <span className="text-xs">
             {note.updated_at ? new Date(note.updated_at).toLocaleDateString() : 'No date'}
           </span>
-          {note.pinned && (
-            <Badge variant="outline" className="text-xs" style={{ borderColor: colorConfig.border, color: colorConfig.text }}>
-              Pinned
-            </Badge>
-          )}
+          <div className="flex items-center gap-1">
+            {note.is_private && (
+              <Badge variant="outline" className="text-xs flex items-center gap-1" style={{ borderColor: colorConfig.border, color: colorConfig.text }}>
+                <Lock className="h-3 w-3" /> Private
+              </Badge>
+            )}
+            {note.pinned && (
+              <Badge variant="outline" className="text-xs" style={{ borderColor: colorConfig.border, color: colorConfig.text }}>
+                Pinned
+              </Badge>
+            )}
+          </div>
         </div>
       </CardContent>
+
+      {/* PIN dialog for setting up / entering the private-notes PIN */}
+      {pinDialog && (
+        <PinDialog
+          mode={pinDialog}
+          open={!!pinDialog}
+          noteId={note.id}
+          onClose={() => setPinDialog(null)}
+          onUnlocked={handleUnlocked}
+          onPinSet={() => {
+            // After creating the PIN via the "Make private" flow, mark private now.
+            if (pinDialog === 'setup') onUpdate({ ...note, is_private: true });
+          }}
+        />
+      )}
     </Card>
   );
 };

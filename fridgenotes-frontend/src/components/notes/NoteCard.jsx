@@ -69,7 +69,10 @@ const NoteCard = ({
   // After the user unlocks, we hold the full note here and render from it.
   const [unlockedContent, setUnlockedContent] = useState(null);
   const [pinDialog, setPinDialog] = useState(null); // 'unlock' | 'setup' | null
-  const isLocked = note.is_locked && !unlockedContent;
+  // Show locked whenever the note is private and we haven't unlocked it in this
+  // session. Keying on is_private (not just is_locked) means a note just marked
+  // private shows locked immediately, before the next redacted re-fetch.
+  const isLocked = note.is_private && !unlockedContent;
 
   // The note whose content we render: the unlocked full version if we have it,
   // otherwise the (possibly redacted) note from props.
@@ -192,7 +195,7 @@ const NoteCard = ({
       onUpdate({ ...note, is_private: true });
     } else {
       // Making public: content must be available. If locked, unlock first.
-      if (note.is_locked && !unlockedContent) {
+      if (isLocked) {
         setPinDialog('unlock');
         return;
       }

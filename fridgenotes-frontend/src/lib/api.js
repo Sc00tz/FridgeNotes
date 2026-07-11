@@ -210,6 +210,33 @@ class APIClient {
   }
 
   /**
+   * Whether the current user has a private-notes PIN set.
+   * @returns {Promise<{has_private_pin: boolean}>}
+   */
+  async getPrivatePinStatus() {
+    return this.makeRequest('/auth/private-pin');
+  }
+
+  /**
+   * Set or change the private-notes PIN. First PIN requires the account
+   * password; changing requires the current PIN (or password).
+   * @param {{new_pin: string, password?: string, current_pin?: string}} data
+   */
+  async setPrivatePin(data) {
+    return this.makeRequest('/auth/private-pin', { method: 'POST', body: data });
+  }
+
+  /**
+   * Unlock a private note with the PIN; returns the full (unredacted) note.
+   * @param {number|string} noteId
+   * @param {string} pin
+   * @returns {Promise<Object>} the full note
+   */
+  async unlockNote(noteId, pin) {
+    return this.makeRequest(`/notes/${noteId}/unlock`, { method: 'POST', body: { pin } });
+  }
+
+  /**
    * List attachments for a note.
    * @param {number|string} noteId
    * @returns {Promise<Array>} attachment metadata

@@ -8,6 +8,7 @@ import apiClient from '../../lib/api';
 const LabelAutocomplete = ({
   onSelectLabel,
   excludeLabelIds = [],
+  localLabels = null,   // when provided, filter these in-memory instead of hitting the server
   placeholder = "Search labels...",
   showAddButton = true,
   className = '',
@@ -49,19 +50,38 @@ const LabelAutocomplete = ({
     [excludeLabelIds, maxResults]
   );
 
-  // Debounce search requests
+  // Filter the in-memory label list (instant, no network). Matches on the
+  // label's display/full/name, case-insensitive.
+  const filterLocal = useCallback((query) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    return (localLabels || [])
+      .filter(label => !excludeLabelIds.includes(label.id))
+      .filter(label => {
+        const names = [label.display_name, label.full_name, label.name].filter(Boolean);
+        return names.some(n => n.toLowerCase().includes(q));
+      })
+      .slice(0, maxResults);
+  }, [localLabels, excludeLabelIds, maxResults]);
+
   useEffect(() => {
     if (!searchTerm.trim()) {
       setSuggestions([]);
       return;
     }
 
+    // Local mode: filter synchronously for instant results.
+    if (localLabels) {
+      setSuggestions(filterLocal(searchTerm));
+      return;
+    }
+
+    // Server mode (fallback): debounced request.
     const timer = setTimeout(() => {
       searchLabels(searchTerm);
     }, 300);
-
     return () => clearTimeout(timer);
-  }, [searchTerm, searchLabels]);
+  }, [searchTerm, searchLabels, localLabels, filterLocal]);
 
   // Close dropdown when clicking outside
   useEffect(() => {

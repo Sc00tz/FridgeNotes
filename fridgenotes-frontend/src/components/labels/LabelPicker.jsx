@@ -45,10 +45,12 @@ const LabelPicker = ({
           />
         ))}
         
-        {/* Enhanced Label Autocomplete */}
+        {/* Enhanced Label Autocomplete — pass the already-loaded labels so it
+            filters locally (instant) instead of hitting the server per keystroke. */}
         <LabelAutocomplete
           onSelectLabel={handleAddLabel}
           excludeLabelIds={attachedLabelIds}
+          localLabels={allLabels}
           placeholder="Search and add labels..."
           showAddButton={true}
           maxResults={8}

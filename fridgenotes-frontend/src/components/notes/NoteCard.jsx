@@ -59,7 +59,8 @@ const NoteCard = ({
   isEditing,
   onEditToggle,
   userAutocompleteItems = [],
-  onAutocompleteAdd
+  onAutocompleteAdd,
+  largeEditor = false
 }) => {
   const [editedNote, setEditedNote] = useState(note);
   const [newChecklistItem, setNewChecklistItem] = useState('');
@@ -382,18 +383,20 @@ const NoteCard = ({
               Unlock
             </Button>
           </div>
-        ) : note.note_type === 'text' ? (
-          /* Text Note */
+        ) : effectiveNote.note_type === 'text' ? (
+          /* Text Note — read from effectiveNote so unlocked content shows in
+             view mode too (note.content is null while redacted). */
           isEditing ? (
             <Textarea
               value={editedNote.content || ''}
               onChange={(e) => setEditedNote({ ...editedNote, content: e.target.value })}
               placeholder="Start writing..."
-              className="min-h-[100px] border-none p-0 resize-none focus-visible:ring-0"
+              className={`${largeEditor ? 'min-h-[50vh]' : 'min-h-[100px]'} border-none p-0 resize-none focus-visible:ring-0`}
+              autoFocus={largeEditor}
             />
           ) : (
             <div className="whitespace-pre-wrap-break text-sm leading-relaxed text-container-safe" style={{ color: colorConfig.text }}>
-              {note.content || (
+              {effectiveNote.content || (
                 <span className="italic" style={{ color: colorConfig.text }}>Empty note</span>
               )}
             </div>

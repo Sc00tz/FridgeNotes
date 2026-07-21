@@ -69,6 +69,17 @@ const NotesGrid = ({
     return new Date(b.created_at) - new Date(a.created_at);
   });
 
+  // Open a note in the large editor when its card is clicked — but ignore
+  // clicks on interactive controls (pin, color, menu, checkboxes, links) so
+  // those keep working, and don't fire right after a drag.
+  const handleCardOpen = useCallback((e, noteId) => {
+    if (isDragging) return;
+    if (e.target.closest('button, a, input, textarea, [role="menu"], [role="menuitem"], [role="dialog"]')) {
+      return;
+    }
+    onEditToggle(noteId);
+  }, [isDragging, onEditToggle]);
+
   const handleDragStart = useCallback((e, noteId) => {
     const note = filteredNotes.find(n => n.id === noteId);
 
@@ -226,7 +237,7 @@ const NotesGrid = ({
     );
   }
 
-  return (
+  const grid = (
     <VirtualizedGrid
       items={filteredNotes}
       className={`grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 min-h-[200px] ${isDragging ? 'drag-active' : ''}`}
@@ -241,13 +252,14 @@ const NotesGrid = ({
             key={note.id}
             data-note-id={note.id}
             className={`transition-all duration-200 ${isDraggedOver ? 'scale-105 ring-2 ring-blue-500 ring-opacity-50' : ''} ${isBeingDragged ? 'opacity-50 scale-95' : ''} ${note.pinned ? 'cursor-default' : 'cursor-grab'}`}
-            draggable={(!editingNoteId || editingNoteId !== note.id) && !note.pinned}
+            draggable={!note.pinned}
             onDragStart={(e) => handleDragStart(e, note.id, index)}
             onDragEnd={handleDragEnd}
             onDragOver={handleDragOver}
             onDragEnter={(e) => handleDragEnter(e, index)}
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, index)}
+            onClick={(e) => handleCardOpen(e, note.id)}
           >
             <NoteCard
               note={note}
@@ -261,7 +273,7 @@ const NotesGrid = ({
               onLabelAdd={onLabelAdd}
               allLabels={allLabels}
               onPinToggle={onPinToggle}
-              isEditing={editingNoteId === note.id}
+              isEditing={false}
               onEditToggle={(editing) => onEditToggle(editing ? note.id : null)}
               isDragging={isDragging}
               isBeingDragged={isBeingDragged}
@@ -272,6 +284,52 @@ const NotesGrid = ({
         );
       }}
     />
+  );
+
+  // The note currently being edited (rendered large in a modal overlay).
+  const editingNote = editingNoteId != null
+    ? filteredNotes.find(n => n.id === editingNoteId)
+    : null;
+
+  return (
+    <>
+      {grid}
+
+      {/* Keep-style editor: the note opens centered and larger, in edit mode,
+          over a backdrop. Reuses NoteCard so all editing behavior is identical. */}
+      {editingNote && (
+        <div
+          className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:p-8"
+          onClick={() => onEditToggle(null)}
+        >
+          <div
+            className="w-full max-w-2xl mt-4 sm:mt-12"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <NoteCard
+              note={editingNote}
+              onUpdate={onUpdate}
+              onDelete={onDelete}
+              onShare={onShare}
+              onChecklistItemUpdate={(itemId, itemData) => onChecklistItemUpdate(editingNote.id, itemId, itemData)}
+              onHideSharedNote={onHideSharedNote}
+              onLabelClick={onLabelClick}
+              onLabelRemove={onLabelRemove}
+              onLabelAdd={onLabelAdd}
+              allLabels={allLabels}
+              onPinToggle={onPinToggle}
+              isEditing={true}
+              onEditToggle={(editing) => onEditToggle(editing ? editingNote.id : null)}
+              isDragging={false}
+              isBeingDragged={false}
+              userAutocompleteItems={userAutocompleteItems}
+              onAutocompleteAdd={onAutocompleteAdd}
+              largeEditor
+            />
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 
